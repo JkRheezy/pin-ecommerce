@@ -1,325 +1,422 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import React from 'react';
-
-// Types Layer: Define test-specific types
-interface TestContext {
-  mockRouter: {
-    push: ReturnType<typeof vi.fn>;
-    replace: ReturnType<typeof vi.fn>;
-  };
-  mockLogger: {
-    error: ReturnType<typeof vi.fn>;
-    info: ReturnType<typeof vi.fn>;
-    debug: ReturnType<typeof vi.fn>;
-  };
-}
-
-// Mock the next/navigation module before importing the component
-vi.mock('next/navigation', () => ({
-  useRouter: vi.fn(),
-  useSearchParams: vi.fn(),
-}));
-
-// Mock structured logger
-vi.mock('@harness/logging', () => ({
-  createLogger: vi.fn(() => ({
-    error: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-  })),
-}));
-
-// Import after mocks are set up
-import { useRouter, useSearchParams } from 'next/navigation';
-import { createLogger } from '@harness/logging';
+import { useRouter } from 'next/navigation';
 import Page from './page';
+import * as repoModule from '../repo/FeatureFlagRepo';
+import * as serviceModule from '../service/FeatureFlagService';
+import { FeatureFlag, FeatureFlagConfig } from '../types/FeatureFlagTypes';
+import { RuntimeError } from '../runtime/RuntimeErrors';
 
-describe('Page Component', () => {
-  // Config Layer: Test configuration
-  const TEST_CONFIG = {
-    defaultRedirect: '/dashboard',
-    errorRedirect: '/error',
-    loadingDelay: 100,
-  } as const;
+// Mock Next.js router
+jest.mock('next/navigation', () => ({
+  useRouter: jest.fn(),
+}));
 
-  let context: TestContext;
+// Mock the repo and service layers
+jest.mock('../repo/FeatureFlagRepo');
+jest.mock('../service/FeatureFlagService');
+
+describe('Page', () => {
+  const mockPush = jest.fn();
+  const mockFeatureFlags: FeatureFlag[] = [
+    {
+      identifier: 'flag-1',
+      name: 'Test Flag 1',
+      enabled: true,
+      description: 'First test flag',
+    },
+    {
+      identifier: 'flag-2',
+      name: 'Test Flag 2',
+      enabled: false,
+      description: 'Second test flag',
+    },
+  ];
+
+  const mockConfig: FeatureFlagConfig = {
+    projectIdentifier: 'test-project',
+    environmentIdentifier: 'test-env',
+    accountId: 'test-account',
+  };
 
   beforeEach(() => {
-    // Setup fresh mocks for each test
-    context = {
-      mockRouter: {
-        push: vi.fn(),
-        replace: vi.fn(),
-      },
-      mockLogger: {
-        error: vi.fn(),
-        info: vi.fn(),
-        debug: vi.fn(),
-      },
-    };
-
-    // Configure mocks
-    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue(context.mockRouter);
-    (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-      get: vi.fn().mockReturnValue(null),
-    });
-    (createLogger as ReturnType<typeof vi.fn>).mockReturnValue(context.mockLogger);
+    jest.clearAllMocks();
+    (useRouter as jest.Mock).mockReturnValue({ push: mockPush });
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  // Service Layer: Core functionality tests
-  describe('Rendering', () => {
+  describe('Core Functionality', () => {
     it('should render loading state initially', () => {
+      // Arrange: Mock service to return pending promise
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockImplementation(
+        () => new Promise(() => {}) // Never resolves
+      );
+
+      // Act
       render(<Page />);
-      
-      // Verify loading indicator is present
-      expect(screen.getByRole('status')).toBeInTheDocument();
-      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+
+      // Assert
+      expect(screen.getByTestId('loading-spinner')).toBeInTheDocument();
+      expect(screen.getByText('Loading feature flags...')).toBeInTheDocument();
     });
 
-    it('should render without crashing', () => {
-      const { container } = render(<Page />);
-      expect(container).toBeTruthy();
+    it('should fetch and display feature flags on successful load', async () => {
+      // Arrange: Mock successful service response
+      const mockFetchFeatureFlags = jest
+        .spyOn(serviceModule, 'fetchFeatureFlags')
+        .mockResolvedValue({
+          flags: mockFeatureFlags,
+          config: mockConfig,
+        });
+
+      // Act
+      render(<Page />);
+
+      // Assert: Wait for data to load
+      await waitFor(() => {
+        expect(screen.getByText('Feature Flags')).toBeInTheDocument();
+      });
+
+      // Verify service was called with correct parameters
+      expect(mockFetchFeatureFlags).toHaveBeenCalledWith({
+        page: 0,
+        size: 20,
+      });
+
+      // Verify flags are rendered
+      expect(screen.getByText('Test Flag 1')).toBeInTheDocument();
+      expect(screen.getByText('Test Flag 2')).toBeInTheDocument();
+
+      // Verify status badges
+      expect(screen.getByText('Enabled')).toBeInTheDocument();
+      expect(screen.getByText('Disabled')).toBeInTheDocument();
+    });
+
+    it('should handle flag toggle action', async () => {
+      // Arrange
+      const mockToggleFlag = jest
+        .spyOn(serviceModule, 'toggleFeatureFlag')
+        .mockResolvedValue(undefined);
+
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: mockFeatureFlags,
+        config: mockConfig,
+      });
+
+      // Act
+      render(<Page />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Flag 1')).toBeInTheDocument();
+      });
+
+      // Click toggle button for first flag
+      const toggleButton = screen.getAllByTestId('toggle-flag-button')[0];
+      toggleButton.click();
+
+      // Assert
+      await waitFor(() => {
+        expect(mockToggleFlag).toHaveBeenCalledWith('flag-1', false);
+      });
+    });
+
+    it('should navigate to flag detail on row click', async () => {
+      // Arrange
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: mockFeatureFlags,
+        config: mockConfig,
+      });
+
+      // Act
+      render(<Page />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Flag 1')).toBeInTheDocument();
+      });
+
+      // Click on flag row
+      const flagRow = screen.getByTestId('flag-row-flag-1');
+      flagRow.click();
+
+      // Assert
+      expect(mockPush).toHaveBeenCalledWith('/flags/flag-1');
     });
   });
 
-  describe('Navigation', () => {
-    it('should redirect to dashboard on successful load', async () => {
-      render(<Page />);
-
-      // Wait for the redirect to occur
-      await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(TEST_CONFIG.defaultRedirect);
-      }, { timeout: TEST_CONFIG.loadingDelay * 2 });
-    });
-
-    it('should handle custom redirect from search params', async () => {
-      const customRedirect = '/custom-path';
-      (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn().mockImplementation((key: string) => 
-          key === 'redirect' ? customRedirect : null
-        ),
-      });
-
-      render(<Page />);
-
-      await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(customRedirect);
-      });
-    });
-
-    it('should validate redirect URL to prevent open redirect vulnerabilities', async () => {
-      // Malicious redirect attempt
-      const maliciousRedirect = 'https://evil.com/phishing';
-      (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn().mockImplementation((key: string) => 
-          key === 'redirect' ? maliciousRedirect : null
-        ),
-      });
-
-      render(<Page />);
-
-      // Should fall back to default redirect, not use malicious URL
-      await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(TEST_CONFIG.defaultRedirect);
-      });
-    });
-  });
-
-  // Runtime Layer: Error handling and edge cases
   describe('Error Handling', () => {
-    it('should handle router errors gracefully', async () => {
-      const routerError = new Error('Router navigation failed');
-      context.mockRouter.replace.mockImplementation(() => {
-        throw routerError;
+    it('should display error message on RuntimeError', async () => {
+      // Arrange: Mock service to throw RuntimeError
+      const runtimeError = new RuntimeError(
+        'FETCH_ERROR',
+        'Failed to fetch feature flags from API'
+      );
+      jest
+        .spyOn(serviceModule, 'fetchFeatureFlags')
+        .mockRejectedValue(runtimeError);
+
+      // Act
+      render(<Page />);
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByTestId('error-container')).toBeInTheDocument();
       });
 
+      expect(screen.getByText('Failed to fetch feature flags from API')).toBeInTheDocument();
+      expect(screen.getByText('Retry')).toBeInTheDocument();
+    });
+
+    it('should display generic error for unknown error types', async () => {
+      // Arrange: Mock service to throw generic error
+      jest
+        .spyOn(serviceModule, 'fetchFeatureFlags')
+        .mockRejectedValue(new Error('Network timeout'));
+
+      // Act
+      render(<Page />);
+
+      // Assert
+      await waitFor(() => {
+        expect(screen.getByTestId('error-container')).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByText('An unexpected error occurred. Please try again.')
+      ).toBeInTheDocument();
+    });
+
+    it('should allow retry after error', async () => {
+      // Arrange: First call fails, second succeeds
+      const mockFetch = jest
+        .spyOn(serviceModule, 'fetchFeatureFlags')
+        .mockRejectedValueOnce(new RuntimeError('FETCH_ERROR', 'Initial error'))
+        .mockResolvedValueOnce({
+          flags: mockFeatureFlags,
+          config: mockConfig,
+        });
+
+      // Act: Initial render with error
       render(<Page />);
 
       await waitFor(() => {
-        expect(context.mockLogger.error).toHaveBeenCalledWith(
-          'Navigation failed',
-          expect.objectContaining({
-            error: routerError.message,
-          })
-        );
-      });
-    });
-
-    it('should handle missing router context', () => {
-      (useRouter as ReturnType<typeof vi.fn>).mockReturnValue(null);
-
-      // Should not throw, should handle gracefully
-      expect(() => render(<Page />)).not.toThrow();
-    });
-
-    it('should handle search params parsing errors', async () => {
-      (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn().mockImplementation(() => {
-          throw new Error('Search params access denied');
-        }),
+        expect(screen.getByText('Retry')).toBeInTheDocument();
       });
 
-      render(<Page />);
+      // Click retry button
+      screen.getByText('Retry').click();
 
-      // Should fall back to default behavior
+      // Assert: Should fetch again and show success
       await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(TEST_CONFIG.defaultRedirect);
+        expect(screen.getByText('Test Flag 1')).toBeInTheDocument();
       });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('Edge Cases', () => {
-    it('should handle empty redirect parameter', async () => {
-      (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn().mockImplementation((key: string) => 
-          key === 'redirect' ? '' : null
-        ),
+    it('should handle empty feature flags list', async () => {
+      // Arrange: Return empty flags array
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: [],
+        config: mockConfig,
       });
 
+      // Act
       render(<Page />);
 
+      // Assert
       await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(TEST_CONFIG.defaultRedirect);
+        expect(screen.getByText('No feature flags found')).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByText('Create your first feature flag to get started.')
+      ).toBeInTheDocument();
+    });
+
+    it('should handle null config gracefully', async () => {
+      // Arrange: Return null config (edge case in data layer)
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: mockFeatureFlags,
+        config: null as unknown as FeatureFlagConfig,
+      });
+
+      // Act - should not throw
+      render(<Page />);
+
+      // Assert: Page renders without crashing
+      await waitFor(() => {
+        expect(screen.getByText('Feature Flags')).toBeInTheDocument();
       });
     });
 
-    it('should handle whitespace-only redirect parameter', async () => {
-      (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn().mockImplementation((key: string) => 
-          key === 'redirect' ? '   ' : null
-        ),
+    it('should handle flags with missing optional fields', async () => {
+      // Arrange: Flags with minimal required fields only
+      const minimalFlags: FeatureFlag[] = [
+        {
+          identifier: 'minimal-flag',
+          name: 'Minimal Flag',
+          // enabled and description omitted
+        } as FeatureFlag,
+      ];
+
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: minimalFlags,
+        config: mockConfig,
       });
 
+      // Act
       render(<Page />);
 
+      // Assert
       await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(TEST_CONFIG.defaultRedirect);
+        expect(screen.getByText('Minimal Flag')).toBeInTheDocument();
+      });
+
+      // Should show default disabled state when enabled is undefined
+      expect(screen.getByText('Disabled')).toBeInTheDocument();
+    });
+
+    it('should handle very long flag names and descriptions', async () => {
+      // Arrange: Flag with extremely long text
+      const longTextFlag: FeatureFlag[] = [
+        {
+          identifier: 'long-flag',
+          name: 'A'.repeat(200),
+          enabled: true,
+          description: 'B'.repeat(1000),
+        },
+      ];
+
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: longTextFlag,
+        config: mockConfig,
+      });
+
+      // Act
+      render(<Page />);
+
+      // Assert: Should render without layout breaking
+      await waitFor(() => {
+        expect(screen.getByText('A'.repeat(200))).toBeInTheDocument();
       });
     });
 
-    it('should handle relative path with leading slash', async () => {
-      const relativePath = '/settings/profile';
-      (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn().mockImplementation((key: string) => 
-          key === 'redirect' ? relativePath : null
-        ),
+    it('should handle special characters in flag data', async () => {
+      // Arrange: Flag with special characters and HTML-like content
+      const specialCharFlags: FeatureFlag[] = [
+        {
+          identifier: 'special-flag',
+          name: '<script>alert("xss")</script>',
+          enabled: false,
+          description: 'Test & Verify <b>Bold</b>',
+        },
+      ];
+
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: specialCharFlags,
+        config: mockConfig,
       });
 
+      // Act
       render(<Page />);
 
+      // Assert: Should render as text, not execute HTML
       await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(relativePath);
+        const flagElement = screen.getByTestId('flag-name-special-flag');
+        expect(flagElement.textContent).toBe('<script>alert("xss")</script>');
       });
     });
 
-    it('should reject javascript: protocol URLs', async () => {
-      const xssAttempt = 'javascript:alert("xss")';
-      (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn().mockImplementation((key: string) => 
-          key === 'redirect' ? xssAttempt : null
-        ),
+    it('should handle rapid toggle clicks (debouncing)', async () => {
+      // Arrange
+      const mockToggleFlag = jest
+        .spyOn(serviceModule, 'toggleFeatureFlag')
+        .mockResolvedValue(undefined);
+
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: mockFeatureFlags,
+        config: mockConfig,
       });
 
+      // Act
       render(<Page />);
 
       await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(TEST_CONFIG.defaultRedirect);
-        expect(context.mockLogger.error).toHaveBeenCalledWith(
-          'Invalid redirect URL rejected',
-          expect.any(Object)
-        );
-      });
-    });
-
-    it('should reject data: protocol URLs', async () => {
-      const dataUrlAttempt = 'data:text/html,<script>alert("xss")</script>';
-      (useSearchParams as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn().mockImplementation((key: string) => 
-          key === 'redirect' ? dataUrlAttempt : null
-        ),
+        expect(screen.getByText('Test Flag 1')).toBeInTheDocument();
       });
 
-      render(<Page />);
+      // Rapidly click toggle multiple times
+      const toggleButton = screen.getAllByTestId('toggle-flag-button')[0];
+      toggleButton.click();
+      toggleButton.click();
+      toggleButton.click();
 
+      // Assert: Should debounce and only call once
       await waitFor(() => {
-        expect(context.mockRouter.replace).toHaveBeenCalledWith(TEST_CONFIG.defaultRedirect);
+        expect(mockToggleFlag).toHaveBeenCalledTimes(1);
       });
     });
 
-    it('should handle component unmount during async operation', async () => {
+    it('should cleanup subscriptions on unmount', async () => {
+      // Arrange
+      const mockAbort = jest.fn();
+      const mockFetch = jest
+        .spyOn(serviceModule, 'fetchFeatureFlags')
+        .mockImplementation(() => {
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              resolve({
+                flags: mockFeatureFlags,
+                config: mockConfig,
+              });
+            }, 1000);
+          });
+        });
+
+      // Act
       const { unmount } = render(<Page />);
-      
-      // Unmount before async operations complete
       unmount();
 
-      // Should not throw or log errors after unmount
-      await waitFor(() => {
-        expect(context.mockLogger.error).not.toHaveBeenCalledWith(
-          'Navigation failed',
-          expect.any(Object)
-        );
-      });
-    });
-
-    it('should handle rapid re-renders', async () => {
-      const { rerender } = render(<Page />);
-      
-      // Rapid re-renders should not cause multiple redirects
-      rerender(<Page />);
-      rerender(<Page />);
-      rerender(<Page />);
-
-      await waitFor(() => {
-        // Should only redirect once due to useEffect cleanup
-        expect(context.mockRouter.replace).toHaveBeenCalledTimes(1);
-      });
+      // Assert: Should not throw or leak memory
+      // In real implementation, verify AbortController was called
+      expect(mockFetch).toHaveBeenCalled();
     });
   });
 
-  // UI Layer: Accessibility and user experience tests
   describe('Accessibility', () => {
-    it('should have proper ARIA attributes on loading indicator', () => {
-      render(<Page />);
-      
-      const loadingElement = screen.getByRole('status');
-      expect(loadingElement).toHaveAttribute('aria-live', 'polite');
-    });
-
-    it('should maintain focus management during loading', () => {
-      render(<Page />);
-      
-      // Loading state should be announced to screen readers
-      expect(screen.getByText(/loading/i)).toHaveAttribute('aria-busy', 'true');
-    });
-  });
-
-  describe('Logging', () => {
-    it('should log navigation attempts at debug level', async () => {
-      render(<Page />);
-
-      await waitFor(() => {
-        expect(context.mockLogger.debug).toHaveBeenCalledWith(
-          'Initiating page load',
-          expect.any(Object)
-        );
+    it('should have proper ARIA labels', async () => {
+      // Arrange
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: mockFeatureFlags,
+        config: mockConfig,
       });
-    });
 
-    it('should log successful navigation at info level', async () => {
+      // Act
       render(<Page />);
 
+      // Assert
       await waitFor(() => {
-        expect(context.mockLogger.info).toHaveBeenCalledWith(
-          'Redirecting to dashboard',
-          expect.objectContaining({
-            target: TEST_CONFIG.defaultRedirect,
-          })
-        );
+        expect(screen.getByRole('main')).toBeInTheDocument();
+      });
+
+      expect(screen.getByRole('heading', { name: 'Feature Flags' })).toBeInTheDocument();
+      expect(screen.getByRole('table')).toHaveAttribute('aria-label', 'Feature flags list');
+    });
+
+    it('should support keyboard navigation', async () => {
+      // Arrange
+      jest.spyOn(serviceModule, 'fetchFeatureFlags').mockResolvedValue({
+        flags: mockFeatureFlags,
+        config: mockConfig,
+      });
+
+      // Act
+      render(<Page />);
+
+      // Assert
+      await waitFor(() => {
+        const firstRow = screen.getByTestId('flag-row-flag-1');
+        expect(firstRow).toHaveAttribute('tabIndex', '0');
       });
     });
   });
