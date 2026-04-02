@@ -1,7 +1,7 @@
 {
-  "timestamp": 1775115849613,
+  "timestamp": 1775115970644,
   "currentTask": {
-    "id": "evolution-coverage-1775115276261-8aduz",
+    "id": "evolution-coverage-1775115961510-hmvod",
     "title": "Add tests for db.ts",
     "description": "File src\\lib\\db.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\db.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\db.ts\n  Location: src\\lib\\db.ts\n\n📁 Related Files:\n- src\\lib\\db.ts",
     "requirements": [
@@ -12,60 +12,27 @@
       "Coverage report generated"
     ],
     "priority": "medium",
-    "status": "failed",
+    "status": "running",
     "category": "testing",
     "maxDuration": 6480000,
-    "createdAt": "2026-04-02T07:34:36.293Z",
-    "startedAt": "2026-04-02T07:34:44.308Z",
-    "result": {
-      "status": "failed",
-      "plan": {
-        "steps": [],
-        "error": "401 Invalid Authentication"
-      },
-      "results": [],
-      "validation": {
-        "success": false,
-        "hasChanges": true,
-        "testResult": {
-          "success": false,
-          "output": "",
-          "errors": "npm error Missing script: \"test\"\nnpm error\nnpm error To see a list of scripts, run:\nnpm error   npm run\nnpm error A complete log of this run can be found in: D:\\soft\\DevLibs\\nvm\\node_cache\\_logs\\2026-04-02T07_34_48_125Z-debug-0.log\n"
-        },
-        "lintResult": {
-          "success": false,
-          "output": "\n> pin-store@1.0.0 lint\n> next lint\n\n? How would you like to configure ESLint? https://nextjs.org/docs/basic-features/eslint\n\u001b[?25l❯  Strict (recommended)\n   Base\n   Cancel",
-          "errors": " ⚠ If you set up ESLint yourself, we recommend adding the Next.js ESLint plugin. See https://nextjs.org/docs/basic-features/eslint#migrating-existing-config\n"
-        },
-        "archCheck": {
-          "success": true
-        },
-        "browserValidation": null,
-        "canAutoFix": true
-      },
-      "branch": "harness/evolution-coverage-1775115276261-8aduz",
-      "hasChanges": true,
-      "summary": "完成 \"Add tests for db.ts\"，成功执行 0 个步骤。",
-      "duration": 10031,
-      "completedAt": "2026-04-02T07:34:54.339Z"
-    },
-    "fixTaskId": "fix-1775115294341"
+    "createdAt": "2026-04-02T07:46:01.542Z",
+    "startedAt": "2026-04-02T07:46:09.997Z"
   },
   "stats": {
     "completed": 0,
-    "failed": 10,
+    "failed": 69,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
-    "failed": 5,
+    "failed": 69,
     "escalated": 0,
-    "startTime": 1775115249600
+    "startTime": 1775115370630
   },
   "queueState": {
     "queue": [
       {
-        "id": "evolution-coverage-1775115276261-fdv2k",
+        "id": "evolution-coverage-1775115961510-fosn3",
         "title": "Add tests for page.tsx",
         "description": "File src\\app\\page.tsx appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\app\\page.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\app\\page.tsx\n  Location: src\\app\\page.tsx\n\n📁 Related Files:\n- src\\app\\page.tsx",
         "requirements": [
@@ -79,10 +46,10 @@
         "status": "pending",
         "category": "testing",
         "maxDuration": 6480000,
-        "createdAt": "2026-04-02T07:34:36.293Z"
+        "createdAt": "2026-04-02T07:46:01.542Z"
       },
       {
-        "id": "evolution-coverage-1775115276261-y9rtr",
+        "id": "evolution-coverage-1775115961510-7nng5",
         "title": "Add tests for layout.tsx",
         "description": "File src\\app\\layout.tsx appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\app\\layout.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\app\\layout.tsx\n  Location: src\\app\\layout.tsx\n\n📁 Related Files:\n- src\\app\\layout.tsx",
         "requirements": [
@@ -96,10 +63,10 @@
         "status": "pending",
         "category": "testing",
         "maxDuration": 6480000,
-        "createdAt": "2026-04-02T07:34:36.293Z"
+        "createdAt": "2026-04-02T07:46:01.542Z"
       },
       {
-        "id": "evolution-coverage-1775115276261-qpony",
+        "id": "evolution-coverage-1775115961510-wwnse",
         "title": "Add tests for trends.ts",
         "description": "File src\\lib\\types\\trends.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\types\\trends.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\types\\trends.ts\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
         "requirements": [
@@ -113,10 +80,29 @@
         "status": "pending",
         "category": "testing",
         "maxDuration": 6480000,
-        "createdAt": "2026-04-02T07:34:36.293Z"
+        "createdAt": "2026-04-02T07:46:01.542Z"
       }
     ],
-    "activeTasks": []
+    "activeTasks": [
+      {
+        "id": "evolution-coverage-1775115961510-hmvod",
+        "title": "Add tests for db.ts",
+        "description": "File src\\lib\\db.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\db.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\db.ts\n  Location: src\\lib\\db.ts\n\n📁 Related Files:\n- src\\lib\\db.ts",
+        "requirements": [
+          "Create test file: src\\lib\\db.test.ts",
+          "Test core functionality",
+          "Test edge cases",
+          "Tests must pass in CI",
+          "Coverage report generated"
+        ],
+        "priority": "medium",
+        "status": "running",
+        "category": "testing",
+        "maxDuration": 6480000,
+        "createdAt": "2026-04-02T07:46:01.542Z",
+        "startedAt": "2026-04-02T07:46:09.997Z"
+      }
+    ]
   },
   "hasGeneratedInitialTasks": true
 }
