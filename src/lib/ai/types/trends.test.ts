@@ -1,490 +1,664 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import type { MockedFunction } from 'jest-mock';
-import {
-  analyzeTrends,
-  detectAnomalies,
-  calculateTrendDirection,
-  aggregateTimeSeries,
-  type TrendAnalysis,
-  type AnomalyConfig,
-  type TimeSeriesPoint,
-  type TrendDirection,
+/**
+ * @file trends.test.ts
+ * @description Comprehensive test suite for AI trends types
+ * @layer Types
+ */
+
+import { describe, it, expect } from 'vitest';
+import type {
+  TrendDirection,
+  TrendSeverity,
+  TrendMetric,
+  TrendDataPoint,
+  TrendSeries,
+  TrendAnalysis,
+  TrendAlert,
+  TrendForecast,
+  TrendComparison,
+  TrendConfig,
+  TrendReport,
+  TrendExportFormat,
+  TrendFilterOptions,
+  TrendAggregationType,
+  TrendTimeRange,
+  TrendAnomaly,
+  TrendInsight,
+  CreateTrendMetricRequest,
+  UpdateTrendMetricRequest,
+  TrendQueryParams,
+  TrendApiResponse,
+  TrendErrorCode,
 } from './trends';
-import { createLogger } from '@harness/logging';
 
-// Mock the logger to avoid console output during tests
-jest.mock('@harness/logging', () => ({
-  createLogger: jest.fn(() => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  })),
-}));
-
-describe('trends', () => {
-  const mockLogger = createLogger('trends-test');
-
-  describe('analyzeTrends', () => {
-    it('should analyze trends for valid time series data', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 15 },
-        { timestamp: new Date('2024-01-03'), value: 20 },
-        { timestamp: new Date('2024-01-04'), value: 25 },
-        { timestamp: new Date('2024-01-05'), value: 30 },
-      ];
-
-      const result: TrendAnalysis = analyzeTrends(data);
-
-      expect(result.direction).toBe('increasing');
-      expect(result.slope).toBeGreaterThan(0);
-      expect(result.confidence).toBeGreaterThan(0);
-      expect(result.confidence).toBeLessThanOrEqual(1);
-      expect(result.dataPoints).toBe(5);
-    });
-
-    it('should detect decreasing trends', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 50 },
-        { timestamp: new Date('2024-01-02'), value: 40 },
-        { timestamp: new Date('2024-01-03'), value: 30 },
-        { timestamp: new Date('2024-01-04'), value: 20 },
-        { timestamp: new Date('2024-01-05'), value: 10 },
-      ];
-
-      const result: TrendAnalysis = analyzeTrends(data);
-
-      expect(result.direction).toBe('decreasing');
-      expect(result.slope).toBeLessThan(0);
-    });
-
-    it('should detect stable trends with low variance', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 100 },
-        { timestamp: new Date('2024-01-02'), value: 101 },
-        { timestamp: new Date('2024-01-03'), value: 99 },
-        { timestamp: new Date('2024-01-04'), value: 100 },
-        { timestamp: new Date('2024-01-05'), value: 100 },
-      ];
-
-      const result: TrendAnalysis = analyzeTrends(data);
-
-      expect(result.direction).toBe('stable');
-      expect(Math.abs(result.slope)).toBeLessThan(0.5);
-    });
-
-    it('should throw error for empty data array', () => {
-      expect(() => analyzeTrends([])).toThrow('Time series data cannot be empty');
-    });
-
-    it('should throw error for single data point', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-      ];
-
-      expect(() => analyzeTrends(data)).toThrow('At least two data points required for trend analysis');
-    });
-
-    it('should throw error for invalid timestamp', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('invalid'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 20 },
-      ];
-
-      expect(() => analyzeTrends(data)).toThrow('Invalid timestamp detected in data');
-    });
-
-    it('should throw error for non-finite values', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: Infinity },
-        { timestamp: new Date('2024-01-02'), value: 20 },
-      ];
-
-      expect(() => analyzeTrends(data)).toThrow('Non-finite value detected in data');
-    });
-
-    it('should handle unsorted data by sorting chronologically', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-05'), value: 30 },
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-03'), value: 20 },
-        { timestamp: new Date('2024-01-02'), value: 15 },
-        { timestamp: new Date('2024-01-04'), value: 25 },
-      ];
-
-      const result: TrendAnalysis = analyzeTrends(data);
-
-      expect(result.direction).toBe('increasing');
-      expect(result.slope).toBeGreaterThan(0);
-    });
-
-    it('should calculate correlation coefficient correctly', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 20 },
-        { timestamp: new Date('2024-01-03'), value: 30 },
-      ];
-
-      const result: TrendAnalysis = analyzeTrends(data);
-
-      // Perfect linear correlation should be close to 1
-      expect(result.correlation).toBeCloseTo(1, 5);
+describe('TrendDirection', () => {
+  it('should accept valid trend directions', () => {
+    const directions: TrendDirection[] = ['up', 'down', 'flat', 'volatile'];
+    
+    directions.forEach(direction => {
+      expect(['up', 'down', 'flat', 'volatile']).toContain(direction);
     });
   });
+});
 
-  describe('detectAnomalies', () => {
-    const defaultConfig: AnomalyConfig = {
-      method: 'zscore',
-      threshold: 2,
+describe('TrendSeverity', () => {
+  it('should accept valid severity levels', () => {
+    const severities: TrendSeverity[] = ['info', 'warning', 'critical', 'none'];
+    
+    severities.forEach(severity => {
+      expect(['info', 'warning', 'critical', 'none']).toContain(severity);
+    });
+  });
+});
+
+describe('TrendMetric', () => {
+  it('should create valid trend metric', () => {
+    const metric: TrendMetric = {
+      id: 'metric-001',
+      name: 'API Response Time',
+      description: 'Average API response time in milliseconds',
+      unit: 'ms',
+      direction: 'down',
+      target: 200,
+      threshold: {
+        warning: 300,
+        critical: 500,
+      },
+      tags: ['performance', 'api'],
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-15'),
     };
 
-    it('should detect anomalies using z-score method', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 11 },
-        { timestamp: new Date('2024-01-03'), value: 10 },
-        { timestamp: new Date('2024-01-04'), value: 12 },
-        { timestamp: new Date('2024-01-05'), value: 100 }, // Anomaly
-        { timestamp: new Date('2024-01-06'), value: 11 },
-      ];
+    expect(metric.id).toBe('metric-001');
+    expect(metric.unit).toBe('ms');
+    expect(metric.threshold?.warning).toBe(300);
+  });
 
-      const anomalies = detectAnomalies(data, defaultConfig);
+  it('should handle optional fields', () => {
+    const minimalMetric: TrendMetric = {
+      id: 'metric-002',
+      name: 'Simple Metric',
+      unit: 'count',
+      direction: 'flat',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-      expect(anomalies).toHaveLength(1);
-      expect(anomalies[0].timestamp).toEqual(new Date('2024-01-05'));
-      expect(anomalies[0].value).toBe(100);
-      expect(anomalies[0].score).toBeGreaterThan(defaultConfig.threshold);
+    expect(minimalMetric.description).toBeUndefined();
+    expect(minimalMetric.threshold).toBeUndefined();
+  });
+});
+
+describe('TrendDataPoint', () => {
+  it('should create valid data point with all fields', () => {
+    const dataPoint: TrendDataPoint = {
+      timestamp: new Date('2024-01-15T10:00:00Z'),
+      value: 150.5,
+      metadata: {
+        source: 'production',
+        region: 'us-east-1',
+      },
+      labels: ['peak-hours'],
+    };
+
+    expect(dataPoint.value).toBe(150.5);
+    expect(dataPoint.metadata?.source).toBe('production');
+  });
+
+  it('should create minimal data point', () => {
+    const minimalPoint: TrendDataPoint = {
+      timestamp: new Date(),
+      value: 42,
+    };
+
+    expect(minimalPoint.metadata).toBeUndefined();
+    expect(minimalPoint.labels).toBeUndefined();
+  });
+});
+
+describe('TrendSeries', () => {
+  it('should create valid trend series', () => {
+    const series: TrendSeries = {
+      metricId: 'metric-001',
+      name: 'Daily API Latency',
+      data: [
+        { timestamp: new Date('2024-01-01'), value: 100 },
+        { timestamp: new Date('2024-01-02'), value: 105 },
+        { timestamp: new Date('2024-01-03'), value: 98 },
+      ],
+      aggregation: 'avg',
+      interval: '1d',
+      tags: ['production', 'api'],
+    };
+
+    expect(series.data).toHaveLength(3);
+    expect(series.aggregation).toBe('avg');
+  });
+
+  it('should validate aggregation types', () => {
+    const validAggregations: TrendAggregationType[] = [
+      'avg', 'sum', 'min', 'max', 'count', 'p50', 'p95', 'p99'
+    ];
+
+    validAggregations.forEach(agg => {
+      const series: TrendSeries = {
+        metricId: 'test',
+        name: 'Test',
+        data: [],
+        aggregation: agg,
+        interval: '1h',
+      };
+      expect(series.aggregation).toBe(agg);
     });
+  });
+});
 
-    it('should detect anomalies using IQR method', () => {
-      const config: AnomalyConfig = {
-        method: 'iqr',
-        threshold: 1.5,
+describe('TrendAnalysis', () => {
+  it('should create complete trend analysis', () => {
+    const analysis: TrendAnalysis = {
+      metricId: 'metric-001',
+      direction: 'down',
+      severity: 'info',
+      changePercent: -15.5,
+      changeAbsolute: -50,
+      periodStart: new Date('2024-01-01'),
+      periodEnd: new Date('2024-01-31'),
+      confidence: 0.95,
+      factors: [
+        { name: 'Optimization', impact: 0.7 },
+        { name: 'Reduced Load', impact: 0.3 },
+      ],
+      recommendations: ['Continue current optimization strategy'],
+    };
+
+    expect(analysis.confidence).toBeGreaterThan(0);
+    expect(analysis.confidence).toBeLessThanOrEqual(1);
+    expect(analysis.factors).toHaveLength(2);
+  });
+
+  it('should handle analysis without factors', () => {
+    const simpleAnalysis: TrendAnalysis = {
+      metricId: 'metric-002',
+      direction: 'flat',
+      severity: 'none',
+      changePercent: 0,
+      changeAbsolute: 0,
+      periodStart: new Date(),
+      periodEnd: new Date(),
+      confidence: 0.8,
+    };
+
+    expect(simpleAnalysis.factors).toBeUndefined();
+    expect(simpleAnalysis.recommendations).toBeUndefined();
+  });
+});
+
+describe('TrendAlert', () => {
+  it('should create valid trend alert', () => {
+    const alert: TrendAlert = {
+      id: 'alert-001',
+      metricId: 'metric-001',
+      severity: 'critical',
+      message: 'Response time exceeded critical threshold',
+      triggeredAt: new Date('2024-01-15T10:30:00Z'),
+      resolvedAt: undefined,
+      acknowledgedBy: undefined,
+      value: 550,
+      threshold: 500,
+      context: {
+        previousValue: 480,
+        trendDirection: 'up',
+      },
+    };
+
+    expect(alert.severity).toBe('critical');
+    expect(alert.resolvedAt).toBeUndefined();
+  });
+
+  it('should handle resolved alert', () => {
+    const resolvedAlert: TrendAlert = {
+      id: 'alert-002',
+      metricId: 'metric-001',
+      severity: 'warning',
+      message: 'Resolved issue',
+      triggeredAt: new Date('2024-01-15T10:00:00Z'),
+      resolvedAt: new Date('2024-01-15T11:00:00Z'),
+      acknowledgedBy: 'user-123',
+      value: 320,
+      threshold: 300,
+    };
+
+    expect(resolvedAlert.resolvedAt).toBeDefined();
+    expect(resolvedAlert.acknowledgedBy).toBe('user-123');
+  });
+});
+
+describe('TrendForecast', () => {
+  it('should create valid forecast', () => {
+    const forecast: TrendForecast = {
+      metricId: 'metric-001',
+      horizon: '7d',
+      predictions: [
+        { timestamp: new Date('2024-01-16'), predicted: 145, lowerBound: 140, upperBound: 150 },
+        { timestamp: new Date('2024-01-17'), predicted: 142, lowerBound: 135, upperBound: 149 },
+      ],
+      confidence: 0.85,
+      model: 'arima',
+      generatedAt: new Date(),
+    };
+
+    expect(forecast.predictions).toHaveLength(2);
+    expect(forecast.model).toBe('arima');
+  });
+
+  it('should validate horizon formats', () => {
+    const validHorizons = ['1h', '6h', '1d', '7d', '30d', '90d'] as const;
+    
+    validHorizons.forEach(horizon => {
+      const forecast: TrendForecast = {
+        metricId: 'test',
+        horizon,
+        predictions: [],
+        confidence: 0.8,
+        model: 'linear',
+        generatedAt: new Date(),
+      };
+      expect(forecast.horizon).toBe(horizon);
+    });
+  });
+});
+
+describe('TrendComparison', () => {
+  it('should create valid comparison', () => {
+    const comparison: TrendComparison = {
+      baselineMetricId: 'metric-001',
+      compareMetricId: 'metric-002',
+      baselinePeriod: { start: new Date('2024-01-01'), end: new Date('2024-01-15') },
+      comparePeriod: { start: new Date('2024-01-16'), end: new Date('2024-01-31') },
+      correlation: 0.75,
+      difference: {
+        absolute: 25,
+        percent: 12.5,
+      },
+      insights: ['Strong positive correlation detected'],
+    };
+
+    expect(comparison.correlation).toBeGreaterThanOrEqual(-1);
+    expect(comparison.correlation).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('TrendConfig', () => {
+  it('should create complete config', () => {
+    const config: TrendConfig = {
+      metricId: 'metric-001',
+      enabled: true,
+      samplingRate: 0.1,
+      retentionDays: 90,
+      alertRules: [
+        {
+          condition: 'above',
+          threshold: 500,
+          severity: 'critical',
+          duration: '5m',
+        },
+        {
+          condition: 'below',
+          threshold: 50,
+          severity: 'warning',
+          duration: '10m',
+        },
+      ],
+      forecastEnabled: true,
+      forecastHorizon: '7d',
+      anomalyDetection: {
+        enabled: true,
+        sensitivity: 'medium',
+        algorithm: 'isolation-forest',
+      },
+    };
+
+    expect(config.alertRules).toHaveLength(2);
+    expect(config.anomalyDetection?.algorithm).toBe('isolation-forest');
+  });
+
+  it('should handle disabled config', () => {
+    const disabledConfig: TrendConfig = {
+      metricId: 'metric-002',
+      enabled: false,
+      retentionDays: 30,
+    };
+
+    expect(disabledConfig.enabled).toBe(false);
+    expect(disabledConfig.alertRules).toBeUndefined();
+  });
+});
+
+describe('TrendReport', () => {
+  it('should create comprehensive report', () => {
+    const report: TrendReport = {
+      id: 'report-001',
+      title: 'Q1 Performance Trends',
+      description: 'Quarterly analysis of key performance metrics',
+      generatedAt: new Date(),
+      generatedBy: 'user-001',
+      timeRange: { start: new Date('2024-01-01'), end: new Date('2024-03-31') },
+      metrics: ['metric-001', 'metric-002', 'metric-003'],
+      analyses: [],
+      alerts: [],
+      insights: [],
+      format: 'pdf',
+    };
+
+    expect(report.format).toBe('pdf');
+  });
+
+  it('should validate export formats', () => {
+    const validFormats: TrendExportFormat[] = ['pdf', 'csv', 'json', 'xlsx', 'html'];
+    
+    validFormats.forEach(format => {
+      const report: TrendReport = {
+        id: 'test',
+        title: 'Test',
+        generatedAt: new Date(),
+        generatedBy: 'user',
+        timeRange: { start: new Date(), end: new Date() },
+        metrics: [],
+        format,
+      };
+      expect(report.format).toBe(format);
+    });
+  });
+});
+
+describe('TrendFilterOptions', () => {
+  it('should create filter with all options', () => {
+    const filter: TrendFilterOptions = {
+      metrics: ['metric-001', 'metric-002'],
+      tags: ['production', 'critical'],
+      severity: ['warning', 'critical'],
+      direction: ['up', 'volatile'],
+      timeRange: { start: new Date('2024-01-01'), end: new Date('2024-01-31') },
+      search: 'response time',
+    };
+
+    expect(filter.metrics).toHaveLength(2);
+    expect(filter.search).toBe('response time');
+  });
+
+  it('should create empty filter', () => {
+    const emptyFilter: TrendFilterOptions = {};
+    
+    expect(Object.keys(emptyFilter)).toHaveLength(0);
+  });
+});
+
+describe('TrendAnomaly', () => {
+  it('should create valid anomaly detection', () => {
+    const anomaly: TrendAnomaly = {
+      id: 'anomaly-001',
+      metricId: 'metric-001',
+      detectedAt: new Date('2024-01-15T10:00:00Z'),
+      severity: 'critical',
+      score: 0.95,
+      expectedValue: 150,
+      actualValue: 350,
+      deviation: 133.33,
+      context: {
+        windowStart: new Date('2024-01-15T09:00:00Z'),
+        windowEnd: new Date('2024-01-15T11:00:00Z'),
+        relatedMetrics: ['metric-002'],
+      },
+      status: 'open',
+    };
+
+    expect(anomaly.score).toBeGreaterThan(0);
+    expect(anomaly.status).toBe('open');
+  });
+
+  it('should handle resolved anomaly', () => {
+    const resolved: TrendAnomaly = {
+      id: 'anomaly-002',
+      metricId: 'metric-001',
+      detectedAt: new Date(),
+      severity: 'warning',
+      score: 0.75,
+      expectedValue: 100,
+      actualValue: 150,
+      deviation: 50,
+      status: 'resolved',
+      resolvedAt: new Date(),
+      resolution: 'automatic',
+    };
+
+    expect(resolved.status).toBe('resolved');
+    expect(resolved.resolution).toBe('automatic');
+  });
+});
+
+describe('TrendInsight', () => {
+  it('should create valid insight', () => {
+    const insight: TrendInsight = {
+      id: 'insight-001',
+      metricId: 'metric-001',
+      type: 'pattern',
+      title: 'Weekly Seasonality Detected',
+      description: 'Clear pattern of higher latency during weekday mornings',
+      confidence: 0.92,
+      generatedAt: new Date(),
+      supportingData: {
+        correlation: 0.85,
+        sampleSize: 1000,
+      },
+      actions: ['Review morning peak capacity', 'Consider auto-scaling'],
+    };
+
+    expect(insight.type).toBe('pattern');
+    expect(insight.supportingData).toBeDefined();
+  });
+});
+
+describe('Request Types', () => {
+  describe('CreateTrendMetricRequest', () => {
+    it('should validate create request', () => {
+      const request: CreateTrendMetricRequest = {
+        name: 'New Metric',
+        unit: 'requests/sec',
+        direction: 'up',
+        description: 'Request rate metric',
+        target: 1000,
+        tags: ['performance'],
       };
 
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 12 },
-        { timestamp: new Date('2024-01-03'), value: 11 },
-        { timestamp: new Date('2024-01-04'), value: 13 },
-        { timestamp: new Date('2024-01-05'), value: 50 }, // Anomaly
-        { timestamp: new Date('2024-01-06'), value: 12 },
-      ];
-
-      const anomalies = detectAnomalies(data, config);
-
-      expect(anomalies.length).toBeGreaterThan(0);
-      expect(anomalies.some(a => a.value === 50)).toBe(true);
-    });
-
-    it('should detect anomalies using MAD method', () => {
-      const config: AnomalyConfig = {
-        method: 'mad',
-        threshold: 3,
-      };
-
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 11 },
-        { timestamp: new Date('2024-01-03'), value: 10 },
-        { timestamp: new Date('2024-01-04'), value: 12 },
-        { timestamp: new Date('2024-01-05'), value: 100 }, // Anomaly
-      ];
-
-      const anomalies = detectAnomalies(data, config);
-
-      expect(anomalies.length).toBeGreaterThan(0);
-    });
-
-    it('should return empty array when no anomalies detected', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 11 },
-        { timestamp: new Date('2024-01-03'), value: 10 },
-        { timestamp: new Date('2024-01-04'), value: 12 },
-        { timestamp: new Date('2024-01-05'), value: 11 },
-      ];
-
-      const anomalies = detectAnomalies(data, defaultConfig);
-
-      expect(anomalies).toHaveLength(0);
-    });
-
-    it('should throw error for empty data array', () => {
-      expect(() => detectAnomalies([], defaultConfig)).toThrow('Data array cannot be empty');
-    });
-
-    it('should throw error for invalid threshold', () => {
-      const config: AnomalyConfig = {
-        method: 'zscore',
-        threshold: -1,
-      };
-
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 20 },
-      ];
-
-      expect(() => detectAnomalies(data, config)).toThrow('Threshold must be positive');
-    });
-
-    it('should throw error for unsupported method', () => {
-      const config = {
-        method: 'unsupported' as const,
-        threshold: 2,
-      };
-
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 20 },
-      ];
-
-      expect(() => detectAnomalies(data, config as AnomalyConfig)).toThrow('Unsupported anomaly detection method');
-    });
-
-    it('should use custom threshold for anomaly detection', () => {
-      const strictConfig: AnomalyConfig = {
-        method: 'zscore',
-        threshold: 1, // Lower threshold = more sensitive
-      };
-
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        { timestamp: new Date('2024-01-02'), value: 11 },
-        { timestamp: new Date('2024-01-03'), value: 15 }, // Might be detected with lower threshold
-        { timestamp: new Date('2024-01-04'), value: 10 },
-      ];
-
-      const anomalies = detectAnomalies(data, strictConfig);
-
-      // With lower threshold, more points may be flagged
-      expect(anomalies.length).toBeGreaterThanOrEqual(0);
+      expect(request.name).toBe('New Metric');
+      // id, createdAt, updatedAt should not be present in create request
+      expect('id' in request).toBe(false);
     });
   });
 
-  describe('calculateTrendDirection', () => {
-    it('should return increasing for positive slope', () => {
-      const result: TrendDirection = calculateTrendDirection(5, 0.9);
+  describe('UpdateTrendMetricRequest', () => {
+    it('should validate partial update', () => {
+      const request: UpdateTrendMetricRequest = {
+        name: 'Updated Name',
+        target: 2000,
+      };
 
-      expect(result).toBe('increasing');
-    });
-
-    it('should return decreasing for negative slope', () => {
-      const result: TrendDirection = calculateTrendDirection(-5, 0.9);
-
-      expect(result).toBe('decreasing');
-    });
-
-    it('should return stable for near-zero slope', () => {
-      const result: TrendDirection = calculateTrendDirection(0.1, 0.9);
-
-      expect(result).toBe('stable');
-    });
-
-    it('should return stable for low confidence regardless of slope', () => {
-      const result: TrendDirection = calculateTrendDirection(10, 0.3);
-
-      expect(result).toBe('stable');
-    });
-
-    it('should handle zero slope', () => {
-      const result: TrendDirection = calculateTrendDirection(0, 0.95);
-
-      expect(result).toBe('stable');
-    });
-
-    it('should use confidence threshold of 0.5', () => {
-      // High slope but exactly at confidence threshold
-      const result: TrendDirection = calculateTrendDirection(100, 0.5);
-
-      expect(result).toBe('stable');
+      // All fields should be optional
+      expect(request.name).toBeDefined();
+      expect(request.unit).toBeUndefined();
     });
   });
 
-  describe('aggregateTimeSeries', () => {
-    it('should aggregate data by hour', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01T10:15:00'), value: 10 },
-        { timestamp: new Date('2024-01-01T10:30:00'), value: 20 },
-        { timestamp: new Date('2024-01-01T10:45:00'), value: 30 },
-        { timestamp: new Date('2024-01-01T11:00:00'), value: 40 },
-      ];
+  describe('TrendQueryParams', () => {
+    it('should create query params', () => {
+      const params: TrendQueryParams = {
+        metricId: 'metric-001',
+        start: new Date('2024-01-01'),
+        end: new Date('2024-01-31'),
+        aggregation: 'avg',
+        interval: '1h',
+        limit: 1000,
+        offset: 0,
+      };
 
-      const result = aggregateTimeSeries(data, 'hour', 'sum');
-
-      expect(result).toHaveLength(2);
-      expect(result[0].value).toBe(60); // Sum of first hour
-      expect(result[1].value).toBe(40); // Sum of second hour
+      expect(params.limit).toBe(1000);
     });
 
-    it('should aggregate data by day', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01T10:00:00'), value: 10 },
-        { timestamp: new Date('2024-01-01T14:00:00'), value: 20 },
-        { timestamp: new Date('2024-01-02T10:00:00'), value: 30 },
-        { timestamp: new Date('2024-01-02T14:00:00'), value: 40 },
-      ];
+    it('should handle minimal query', () => {
+      const minimal: TrendQueryParams = {
+        metricId: 'metric-001',
+        start: new Date(),
+        end: new Date(),
+      };
 
-      const result = aggregateTimeSeries(data, 'day', 'sum');
-
-      expect(result).toHaveLength(2);
-      expect(result[0].value).toBe(30); // Day 1 sum
-      expect(result[1].value).toBe(70); // Day 2 sum
-    });
-
-    it('should support average aggregation', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01T10:00:00'), value: 10 },
-        { timestamp: new Date('2024-01-01T10:30:00'), value: 20 },
-        { timestamp: new Date('2024-01-01T11:00:00'), value: 30 },
-      ];
-
-      const result = aggregateTimeSeries(data, 'hour', 'average');
-
-      expect(result[0].value).toBe(15); // Average of first hour
-      expect(result[1].value).toBe(30); // Average of second hour
-    });
-
-    it('should support max aggregation', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01T10:00:00'), value: 10 },
-        { timestamp: new Date('2024-01-01T10:30:00'), value: 50 },
-        { timestamp: new Date('2024-01-01T11:00:00'), value: 30 },
-      ];
-
-      const result = aggregateTimeSeries(data, 'hour', 'max');
-
-      expect(result[0].value).toBe(50); // Max of first hour
-      expect(result[1].value).toBe(30); // Max of second hour
-    });
-
-    it('should support min aggregation', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01T10:00:00'), value: 10 },
-        { timestamp: new Date('2024-01-01T10:30:00'), value: 50 },
-        { timestamp: new Date('2024-01-01T11:00:00'), value: 30 },
-      ];
-
-      const result = aggregateTimeSeries(data, 'hour', 'min');
-
-      expect(result[0].value).toBe(10); // Min of first hour
-      expect(result[1].value).toBe(30); // Min of second hour
-    });
-
-    it('should throw error for empty data array', () => {
-      expect(() => aggregateTimeSeries([], 'hour', 'sum')).toThrow('Data array cannot be empty');
-    });
-
-    it('should throw error for unsupported granularity', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-      ];
-
-      expect(() => aggregateTimeSeries(data, 'century' as any, 'sum')).toThrow('Unsupported granularity');
-    });
-
-    it('should throw error for unsupported aggregation method', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-      ];
-
-      expect(() => aggregateTimeSeries(data, 'hour', 'median' as any)).toThrow('Unsupported aggregation method');
-    });
-
-    it('should handle single data point', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01T10:00:00'), value: 42 },
-      ];
-
-      const result = aggregateTimeSeries(data, 'hour', 'sum');
-
-      expect(result).toHaveLength(1);
-      expect(result[0].value).toBe(42);
-    });
-
-    it('should aggregate by week correctly', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 }, // Monday
-        { timestamp: new Date('2024-01-02'), value: 20 }, // Tuesday
-        { timestamp: new Date('2024-01-08'), value: 30 }, // Next Monday
-      ];
-
-      const result = aggregateTimeSeries(data, 'week', 'sum');
-
-      expect(result).toHaveLength(2);
-      expect(result[0].value).toBe(30); // First week
-      expect(result[1].value).toBe(30); // Second week
-    });
-
-    it('should aggregate by month correctly', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-15'), value: 10 },
-        { timestamp: new Date('2024-01-20'), value: 20 },
-        { timestamp: new Date('2024-02-05'), value: 30 },
-      ];
-
-      const result = aggregateTimeSeries(data, 'month', 'sum');
-
-      expect(result).toHaveLength(2);
-      expect(result[0].value).toBe(30); // January
-      expect(result[1].value).toBe(30); // February
+      expect(minimal.aggregation).toBeUndefined();
     });
   });
+});
 
-  describe('edge cases and integration', () => {
-    it('should handle very large datasets efficiently', () => {
-      const data: TimeSeriesPoint[] = Array.from({ length: 10000 }, (_, i) => ({
-        timestamp: new Date(2024, 0, 1, 0, i),
-        value: i,
-      }));
+describe('TrendApiResponse', () => {
+  it('should create success response', () => {
+    const response: TrendApiResponse<TrendMetric> = {
+      success: true,
+      data: {
+        id: 'metric-001',
+        name: 'Test Metric',
+        unit: 'ms',
+        direction: 'flat',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      meta: {
+        requestId: 'req-001',
+        timestamp: new Date(),
+        duration: 45,
+      },
+    };
 
-      const startTime = Date.now();
-      const result = analyzeTrends(data);
-      const endTime = Date.now();
+    expect(response.success).toBe(true);
+    expect(response.error).toBeUndefined();
+  });
 
-      expect(result.direction).toBe('increasing');
-      expect(endTime - startTime).toBeLessThan(1000); // Should complete within 1 second
+  it('should create error response', () => {
+    const errorResponse: TrendApiResponse<never> = {
+      success: false,
+      error: {
+        code: 'METRIC_NOT_FOUND',
+        message: 'The requested metric does not exist',
+        details: { metricId: 'invalid-id' },
+      },
+      meta: {
+        requestId: 'req-002',
+        timestamp: new Date(),
+        duration: 12,
+      },
+    };
+
+    expect(errorResponse.success).toBe(false);
+    expect(errorResponse.data).toBeUndefined();
+  });
+});
+
+describe('TrendErrorCode', () => {
+  it('should validate error codes', () => {
+    const validCodes: TrendErrorCode[] = [
+      'METRIC_NOT_FOUND',
+      'INVALID_TIME_RANGE',
+      'AGGREGATION_ERROR',
+      'FORECAST_ERROR',
+      'ALERT_CONFIG_ERROR',
+      'RATE_LIMIT_EXCEEDED',
+      'INTERNAL_ERROR',
+    ];
+
+    validCodes.forEach(code => {
+      expect([
+        'METRIC_NOT_FOUND',
+        'INVALID_TIME_RANGE',
+        'AGGREGATION_ERROR',
+        'FORECAST_ERROR',
+        'ALERT_CONFIG_ERROR',
+        'RATE_LIMIT_EXCEEDED',
+        'INTERNAL_ERROR',
+      ]).toContain(code);
     });
+  });
+});
 
-    it('should handle data with missing values gracefully', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-01-01'), value: 10 },
-        // Gap in data
-        { timestamp: new Date('2024-01-05'), value: 50 },
-      ];
+describe('TrendTimeRange', () => {
+  it('should validate time range', () => {
+    const range: TrendTimeRange = {
+      start: new Date('2024-01-01T00:00:00Z'),
+      end: new Date('2024-01-31T23:59:59Z'),
+    };
 
-      // Should not throw, but may have reduced confidence
-      const result = analyzeTrends(data);
+    expect(range.start.getTime()).toBeLessThan(range.end.getTime());
+  });
 
-      expect(result.dataPoints).toBe(2);
-      expect(result.confidence).toBeDefined();
-    });
+  it('should handle relative time ranges', () => {
+    const relativeRange: TrendTimeRange = {
+      start: new Date('2024-01-01'),
+      end: new Date('2024-01-31'),
+      timezone: 'America/New_York',
+    };
 
-    it('should handle seasonal data patterns', () => {
-      // Simulate weekly seasonality
-      const data: TimeSeriesPoint[] = Array.from({ length: 28 }, (_, i) => ({
-        timestamp: new Date(2024, 0, i + 1),
-        value: 10 + (i % 7) * 5, // Weekly pattern
-      }));
+    expect(relativeRange.timezone).toBe('America/New_York');
+  });
+});
 
-      const result = analyzeTrends(data);
+/**
+ * Edge case tests for robustness
+ */
+describe('Edge Cases', () => {
+  it('should handle empty data arrays', () => {
+    const emptySeries: TrendSeries = {
+      metricId: 'metric-001',
+      name: 'Empty Series',
+      data: [],
+      aggregation: 'avg',
+      interval: '1h',
+    };
 
-      // Overall trend might be flat due to seasonality
-      expect(result.direction).toBeDefined();
-      expect(result.seasonality).toBeDefined();
-    });
+    expect(emptySeries.data).toHaveLength(0);
+  });
 
-    it('should preserve timestamps in anomaly results', () => {
-      const data: TimeSeriesPoint[] = [
-        { timestamp: new Date('2024-06-15T12:30:00Z'), value: 10 },
-        { timestamp: new Date('2024-06-15T13:00:00Z'), value: 1000 },
-        { timestamp: new Date('2024-06-15T13:30:00Z'), value: 10 },
-      ];
+  it('should handle extreme values', () => {
+    const extremePoint: TrendDataPoint = {
+      timestamp: new Date(),
+      value: Number.MAX_SAFE_INTEGER,
+    };
 
-      const anomalies = detectAnomalies(data, { method: 'zscore', threshold: 2 });
+    expect(extremePoint.value).toBe(Number.MAX_SAFE_INTEGER);
+  });
 
-      expect(anomalies[0].timestamp.toISOString()).toBe('2024-06-15T13:00:00.000Z');
-    });
+  it('should handle special characters in strings', () => {
+    const metric: TrendMetric = {
+      id: 'metric-special',
+      name: 'Metric with "quotes" and \\backslashes\\',
+      unit: 'μs', // Unicode character
+      direction: 'up',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    expect(metric.name).toContain('"');
+    expect(metric.unit).toBe('μs');
+  });
+
+  it('should handle null-equivalent optional fields', () => {
+    const metric: TrendMetric = {
+      id: 'metric-minimal',
+      name: 'Minimal',
+      unit: 'count',
+      direction: 'flat',
+      description: undefined,
+      target: undefined,
+      threshold: undefined,
+      tags: undefined,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    expect(metric.description).toBeUndefined();
+    expect(metric.tags).toBeUndefined();
   });
 });

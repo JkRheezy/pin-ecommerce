@@ -1,85 +1,96 @@
 /**
- * TrendDataService.test.ts
- * Unit tests for the TrendDataService following the six-layer architecture
+ * @file TrendDataService.test.ts
+ * @description Comprehensive test suite for TrendDataService
+ * @layer Service
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { TrendDataService } from './TrendDataService';
-import { TrendDataRepo } from '../repo/TrendDataRepo';
+import { TrendDataRepository } from '../repositories/TrendDataRepository';
 import { TrendDataConfig } from '../config/TrendDataConfig';
-import { 
-  TrendData, 
-  TrendDataQuery, 
+import type {
+  TrendData,
+  TrendDataQuery,
   TrendDataResult,
-  TrendGranularity,
-  TrendMetricType 
-} from '../types/TrendData.types';
-import { HarnessLogger } from '@harness/logging';
-import { ValidationError, NotFoundError } from '../types/errors';
+  TrendDataError,
+  TimeRange,
+  TrendMetric,
+  TrendAggregation,
+} from '../types/TrendDataTypes';
+import { Logger } from '@harness/logging';
 
 // Mock dependencies
-vi.mock('../repo/TrendDataRepo');
+vi.mock('../repositories/TrendDataRepository');
+vi.mock('../config/TrendDataConfig');
 vi.mock('@harness/logging');
 
 describe('TrendDataService', () => {
   let service: TrendDataService;
-  let mockRepo: jest.Mocked<TrendDataRepo>;
-  let mockLogger: jest.Mocked<HarnessLogger>;
+  let mockRepository: jest.Mocked<TrendDataRepository>;
+  let mockConfig: jest.Mocked<TrendDataConfig>;
+  let mockLogger: jest.Mocked<Logger>;
 
   // Test fixtures
-  const mockTrendData: TrendData = {
-    id: 'trend-123',
-    metricType: TrendMetricType.DEPLOYMENT_FREQUENCY,
-    granularity: TrendGranularity.DAILY,
-    timestamp: new Date('2024-01-15T00:00:00Z'),
-    value: 42,
-    metadata: {
-      projectId: 'proj-456',
-      orgId: 'org-789'
-    },
-    createdAt: new Date(),
-    updatedAt: new Date()
+  const validTimeRange: TimeRange = {
+    start: new Date('2024-01-01T00:00:00Z'),
+    end: new Date('2024-01-31T23:59:59Z'),
   };
 
-  const mockQuery: TrendDataQuery = {
-    metricType: TrendMetricType.DEPLOYMENT_FREQUENCY,
-    granularity: TrendGranularity.DAILY,
-    startTime: new Date('2024-01-01T00:00:00Z'),
-    endTime: new Date('2024-01-31T23:59:59Z'),
-    filters: {
-      projectId: 'proj-456'
-    }
+  const validQuery: TrendDataQuery = {
+    metric: 'deployment_frequency' as TrendMetric,
+    timeRange: validTimeRange,
+    aggregation: 'daily' as TrendAggregation,
+    filters: { environment: 'production' },
   };
+
+  const mockTrendData: TrendData[] = [
+    {
+      timestamp: new Date('2024-01-01T00:00:00Z'),
+      value: 42,
+      metric: 'deployment_frequency' as TrendMetric,
+      metadata: { environment: 'production' },
+    },
+    {
+      timestamp: new Date('2024-01-02T00:00:00Z'),
+      value: 38,
+      metric: 'deployment_frequency' as TrendMetric,
+      metadata: { environment: 'production' },
+    },
+  ];
 
   beforeEach(() => {
-    // Reset all mocks before each test
+    // Reset all mocks
     vi.clearAllMocks();
 
-    // Create mock instances
+    // Initialize mock logger
     mockLogger = {
       info: vi.fn(),
       error: vi.fn(),
       warn: vi.fn(),
-      debug: vi.fn()
-    } as unknown as jest.Mocked<HarnessLogger>;
+      debug: vi.fn(),
+    } as unknown as jest.Mocked<Logger>;
 
-    mockRepo = {
-      findByQuery: vi.fn(),
-      findById: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-      aggregateTrends: vi.fn()
-    } as unknown as jest.Mocked<TrendDataRepo>;
+    // Initialize mock config
+    mockConfig = {
+      getMaxQueryRange: vi.fn().mockReturnValue(90),
+      getDefaultAggregation: vi.fn().mockReturnValue('daily'),
+      getCacheTTL: vi.fn().mockReturnValue(300),
+      isMetricEnabled: vi.fn().mockReturnValue(true),
+    } as unknown as jest.Mocked<TrendDataConfig>;
+
+    // Initialize mock repository
+    mockRepository = {
+      fetchTrendData: vi.fn(),
+      fetchAggregatedTrendData: vi.fn(),
+      healthCheck: vi.fn(),
+    } as unknown as jest.Mocked<TrendDataRepository>;
 
     // Initialize service with mocked dependencies
     service = new TrendDataService({
-      repo: mockRepo,
+      repository: mockRepository,
+      config: mockConfig,
       logger: mockLogger,
-      config: new TrendDataConfig({
-        maxQueryRangeDays: 90,
-        defaultGranularity: TrendGranularity.DAILY
-      })
     });
   });
 
@@ -87,455 +98,465 @@ describe('TrendDataService', () => {
     vi.restoreAllMocks();
   });
 
-  describe('Layer 1: Types Validation', () => {
-    it('should validate TrendGranularity enum values', () => {
-      const validGranularities = Object.values(TrendGranularity);
-      expect(validGranularities).toContain(TrendGranularity.HOURLY);
-      expect(validGranularities).toContain(TrendGranularity.DAILY);
-      expect(validGranularities).toContain(TrendGranularity.WEEKLY);
-      expect(validGranularities).toContain(TrendGranularity.MONTHLY);
-    });
-
-    it('should validate TrendMetricType enum values', () => {
-      const validMetrics = Object.values(TrendMetricType);
-      expect(validMetrics).toContain(TrendMetricType.DEPLOYMENT_FREQUENCY);
-      expect(validMetrics).toContain(TrendMetricType.LEAD_TIME);
-      expect(validMetrics).toContain(TrendMetricType.MTTR);
-      expect(validMetrics).toContain(TrendMetricType.CHANGE_FAILURE_RATE);
-    });
-  });
-
-  describe('Layer 2: Config Integration', () => {
-    it('should respect maxQueryRangeDays configuration', async () => {
-      const invalidQuery: TrendDataQuery = {
-        ...mockQuery,
-        startTime: new Date('2023-01-01T00:00:00Z'), // More than 90 days ago
-        endTime: new Date('2024-01-31T23:59:59Z')
-      };
-
-      await expect(service.getTrendData(invalidQuery))
-        .rejects
-        .toThrow(ValidationError);
-
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Query range exceeds maximum allowed days',
-        expect.objectContaining({
-          maxDays: 90,
-          actualDays: expect.any(Number)
-        })
+  describe('constructor', () => {
+    it('should initialize with valid dependencies', () => {
+      expect(service).toBeDefined();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'TrendDataService initialized'
       );
     });
 
-    it('should apply default granularity when not specified', async () => {
-      const queryWithoutGranularity: Partial<TrendDataQuery> = {
-        metricType: TrendMetricType.DEPLOYMENT_FREQUENCY,
-        startTime: new Date('2024-01-01T00:00:00Z'),
-        endTime: new Date('2024-01-31T23:59:59Z')
-      };
+    it('should throw error when repository is not provided', () => {
+      expect(() => {
+        new TrendDataService({
+          repository: undefined as unknown as TrendDataRepository,
+          config: mockConfig,
+          logger: mockLogger,
+        });
+      }).toThrow('TrendDataRepository is required');
+    });
 
-      mockRepo.findByQuery.mockResolvedValue([mockTrendData]);
+    it('should throw error when config is not provided', () => {
+      expect(() => {
+        new TrendDataService({
+          repository: mockRepository,
+          config: undefined as unknown as TrendDataConfig,
+          logger: mockLogger,
+        });
+      }).toThrow('TrendDataConfig is required');
+    });
 
-      await service.getTrendData(queryWithoutGranularity as TrendDataQuery);
-
-      expect(mockRepo.findByQuery).toHaveBeenCalledWith(
-        expect.objectContaining({
-          granularity: TrendGranularity.DAILY // Default from config
-        })
-      );
+    it('should throw error when logger is not provided', () => {
+      expect(() => {
+        new TrendDataService({
+          repository: mockRepository,
+          config: mockConfig,
+          logger: undefined as unknown as Logger,
+        });
+      }).toThrow('Logger is required');
     });
   });
 
-  describe('Layer 3: Repo Integration', () => {
-    it('should call repo.findByQuery with validated parameters', async () => {
-      const expectedResult: TrendDataResult = {
-        data: [mockTrendData],
-        totalCount: 1,
+  describe('getTrendData', () => {
+    it('should return trend data for valid query', async () => {
+      // Arrange
+      const mockResult: TrendDataResult = {
+        data: mockTrendData,
+        totalCount: 2,
         hasMore: false,
-        nextCursor: undefined
+      };
+      mockRepository.fetchTrendData.mockResolvedValue(mockResult);
+
+      // Act
+      const result = await service.getTrendData(validQuery);
+
+      // Assert
+      expect(result).toEqual(mockResult);
+      expect(mockRepository.fetchTrendData).toHaveBeenCalledWith(validQuery);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Fetching trend data',
+        expect.objectContaining({ metric: validQuery.metric })
+      );
+    });
+
+    it('should apply default aggregation when not specified', async () => {
+      // Arrange
+      const queryWithoutAggregation: TrendDataQuery = {
+        ...validQuery,
+        aggregation: undefined,
+      };
+      const mockResult: TrendDataResult = {
+        data: mockTrendData,
+        totalCount: 2,
+        hasMore: false,
+      };
+      mockRepository.fetchTrendData.mockResolvedValue(mockResult);
+
+      // Act
+      await service.getTrendData(queryWithoutAggregation);
+
+      // Assert
+      expect(mockRepository.fetchTrendData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          aggregation: 'daily',
+        })
+      );
+    });
+
+    it('should throw error for invalid time range', async () => {
+      // Arrange
+      const invalidQuery: TrendDataQuery = {
+        ...validQuery,
+        timeRange: {
+          start: new Date('2024-01-31T00:00:00Z'),
+          end: new Date('2024-01-01T00:00:00Z'), // End before start
+        },
       };
 
-      mockRepo.findByQuery.mockResolvedValue([mockTrendData]);
-
-      const result = await service.getTrendData(mockQuery);
-
-      expect(mockRepo.findByQuery).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metricType: mockQuery.metricType,
-          granularity: mockQuery.granularity,
-          startTime: mockQuery.startTime,
-          endTime: mockQuery.endTime
-        })
+      // Act & Assert
+      await expect(service.getTrendData(invalidQuery)).rejects.toThrow(
+        'Invalid time range: end date must be after start date'
       );
-      expect(result.data).toHaveLength(1);
+      expect(mockLogger.error).toHaveBeenCalled();
     });
 
-    it('should handle repo errors with proper logging', async () => {
-      const dbError = new Error('Connection failed');
-      mockRepo.findByQuery.mockRejectedValue(dbError);
+    it('should throw error when time range exceeds maximum', async () => {
+      // Arrange
+      const longTimeRange: TimeRange = {
+        start: new Date('2023-01-01T00:00:00Z'),
+        end: new Date('2024-12-31T23:59:59Z'), // More than 90 days
+      };
+      const queryWithLongRange: TrendDataQuery = {
+        ...validQuery,
+        timeRange: longTimeRange,
+      };
 
-      await expect(service.getTrendData(mockQuery))
-        .rejects
-        .toThrow('Failed to retrieve trend data');
+      // Act & Assert
+      await expect(service.getTrendData(queryWithLongRange)).rejects.toThrow(
+        'Time range exceeds maximum allowed range of 90 days'
+      );
+    });
 
+    it('should throw error for disabled metric', async () => {
+      // Arrange
+      mockConfig.isMetricEnabled.mockReturnValue(false);
+
+      // Act & Assert
+      await expect(service.getTrendData(validQuery)).rejects.toThrow(
+        `Metric '${validQuery.metric}' is not enabled`
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Attempted to fetch disabled metric',
+        expect.any(Object)
+      );
+    });
+
+    it('should handle repository errors gracefully', async () => {
+      // Arrange
+      const repositoryError = new Error('Database connection failed');
+      mockRepository.fetchTrendData.mockRejectedValue(repositoryError);
+
+      // Act & Assert
+      await expect(service.getTrendData(validQuery)).rejects.toThrow(
+        'Failed to fetch trend data: Database connection failed'
+      );
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'Error fetching trend data from repository',
+        'Error fetching trend data',
         expect.objectContaining({
-          error: dbError.message,
-          query: expect.any(Object)
+          error: repositoryError.message,
         })
       );
     });
 
-    it('should handle empty results gracefully', async () => {
-      mockRepo.findByQuery.mockResolvedValue([]);
+    it('should validate required metric field', async () => {
+      // Arrange
+      const invalidQuery: TrendDataQuery = {
+        ...validQuery,
+        metric: '' as TrendMetric,
+      };
 
-      const result = await service.getTrendData(mockQuery);
+      // Act & Assert
+      await expect(service.getTrendData(invalidQuery)).rejects.toThrow(
+        'Metric is required'
+      );
+    });
 
-      expect(result.data).toEqual([]);
-      expect(result.totalCount).toBe(0);
-      expect(result.hasMore).toBe(false);
+    it('should validate required timeRange field', async () => {
+      // Arrange
+      const invalidQuery: TrendDataQuery = {
+        ...validQuery,
+        timeRange: undefined as unknown as TimeRange,
+      };
+
+      // Act & Assert
+      await expect(service.getTrendData(invalidQuery)).rejects.toThrow(
+        'TimeRange is required'
+      );
     });
   });
 
-  describe('Layer 4: Service Business Logic', () => {
-    describe('getTrendData', () => {
-      it('should validate query parameters before processing', async () => {
-        const invalidQuery = {
-          ...mockQuery,
-          startTime: new Date('2024-02-01T00:00:00Z'),
-          endTime: new Date('2024-01-01T00:00:00Z') // End before start
-        };
+  describe('getAggregatedTrendData', () => {
+    it('should return aggregated data for valid query', async () => {
+      // Arrange
+      const aggregatedData: TrendData[] = [
+        {
+          timestamp: new Date('2024-01-01T00:00:00Z'),
+          value: 40, // Averaged value
+          metric: 'deployment_frequency' as TrendMetric,
+          metadata: { aggregated: true },
+        },
+      ];
+      mockRepository.fetchAggregatedTrendData.mockResolvedValue(aggregatedData);
 
-        await expect(service.getTrendData(invalidQuery))
-          .rejects
-          .toThrow(ValidationError);
-      });
+      // Act
+      const result = await service.getAggregatedTrendData(validQuery, 'weekly');
 
-      it('should calculate pagination correctly', async () => {
-        const paginatedQuery: TrendDataQuery = {
-          ...mockQuery,
-          limit: 10,
-          cursor: 'cursor-123'
-        };
-
-        const mockData = Array(10).fill(null).map((_, i) => ({
-          ...mockTrendData,
-          id: `trend-${i}`
-        }));
-
-        mockRepo.findByQuery.mockResolvedValue(mockData);
-
-        const result = await service.getTrendData(paginatedQuery);
-
-        expect(result.data).toHaveLength(10);
-        expect(result.hasMore).toBe(true); // Assuming repo indicates more data
-      });
-
-      it('should apply data transformation when specified', async () => {
-        const queryWithTransform: TrendDataQuery = {
-          ...mockQuery,
-          transform: 'normalize'
-        };
-
-        mockRepo.findByQuery.mockResolvedValue([mockTrendData]);
-
-        const result = await service.getTrendData(queryWithTransform);
-
-        // Verify transformation was applied (implementation specific)
-        expect(result.data[0]).toHaveProperty('normalizedValue');
-      });
-    });
-
-    describe('aggregateTrends', () => {
-      it('should call repo.aggregateTrends with proper aggregation config', async () => {
-        const aggregationConfig = {
-          groupBy: ['projectId'],
-          aggregations: ['avg', 'max', 'min']
-        };
-
-        mockRepo.aggregateTrends.mockResolvedValue([
-          { projectId: 'proj-456', avg: 42, max: 100, min: 10 }
-        ]);
-
-        const result = await service.aggregateTrends(mockQuery, aggregationConfig);
-
-        expect(mockRepo.aggregateTrends).toHaveBeenCalledWith(
-          expect.any(Object),
-          aggregationConfig
-        );
-        expect(result).toHaveLength(1);
-      });
-    });
-
-    describe('createTrendData', () => {
-      it('should validate input data before creation', async () => {
-        const invalidData = {
-          metricType: 'INVALID_TYPE', // Invalid enum value
-          value: -1 // Negative value not allowed
-        };
-
-        await expect(service.createTrendData(invalidData as any))
-          .rejects
-          .toThrow(ValidationError);
-      });
-
-      it('should enrich data with timestamps before saving', async () => {
-        const newTrendData = {
-          metricType: TrendMetricType.DEPLOYMENT_FREQUENCY,
-          granularity: TrendGranularity.DAILY,
-          value: 50,
-          metadata: { projectId: 'proj-999' }
-        };
-
-        mockRepo.create.mockResolvedValue({
-          ...mockTrendData,
-          ...newTrendData,
-          id: 'new-trend-123'
-        });
-
-        const result = await service.createTrendData(newTrendData);
-
-        expect(mockRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            createdAt: expect.any(Date),
-            updatedAt: expect.any(Date)
-          })
-        );
-        expect(result.id).toBeDefined();
-      });
-    });
-
-    describe('updateTrendData', () => {
-      it('should throw NotFoundError when trend does not exist', async () => {
-        mockRepo.findById.mockResolvedValue(null);
-
-        await expect(service.updateTrendData('non-existent-id', { value: 100 }))
-          .rejects
-          .toThrow(NotFoundError);
-      });
-
-      it('should prevent updates to immutable fields', async () => {
-        mockRepo.findById.mockResolvedValue(mockTrendData);
-
-        await expect(
-          service.updateTrendData('trend-123', {
-            id: 'new-id', // Should not be updatable
-            createdAt: new Date() // Should not be updatable
-          } as any)
-        ).rejects.toThrow(ValidationError);
-      });
-    });
-
-    describe('deleteTrendData', () => {
-      it('should perform soft delete by default', async () => {
-        mockRepo.findById.mockResolvedValue(mockTrendData);
-        mockRepo.update.mockResolvedValue({
-          ...mockTrendData,
-          deletedAt: new Date()
-        });
-
-        await service.deleteTrendData('trend-123');
-
-        expect(mockRepo.update).toHaveBeenCalledWith(
-          'trend-123',
-          expect.objectContaining({
-            deletedAt: expect.any(Date)
-          })
-        );
-      });
-
-      it('should support hard delete when specified', async () => {
-        mockRepo.findById.mockResolvedValue(mockTrendData);
-        mockRepo.delete.mockResolvedValue(undefined);
-
-        await service.deleteTrendData('trend-123', { hardDelete: true });
-
-        expect(mockRepo.delete).toHaveBeenCalledWith('trend-123');
-        expect(mockRepo.update).not.toHaveBeenCalled();
-      });
-    });
-  });
-
-  describe('Layer 5: Runtime Behavior', () => {
-    it('should handle concurrent requests without data corruption', async () => {
-      const promises = Array(5).fill(null).map((_, i) => 
-        service.getTrendData({
-          ...mockQuery,
-          filters: { ...mockQuery.filters, requestId: `req-${i}` }
-        })
+      // Assert
+      expect(result).toEqual(aggregatedData);
+      expect(mockRepository.fetchAggregatedTrendData).toHaveBeenCalledWith(
+        validQuery,
+        'weekly'
       );
-
-      mockRepo.findByQuery.mockResolvedValue([mockTrendData]);
-
-      const results = await Promise.all(promises);
-
-      // All requests should complete successfully
-      expect(results).toHaveLength(5);
-      results.forEach(result => {
-        expect(result.data).toHaveLength(1);
-      });
     });
 
-    it('should implement request timeout handling', async () => {
-      mockRepo.findByQuery.mockImplementation(() => 
-        new Promise(resolve => setTimeout(resolve, 10000)) // Simulate slow query
-      );
-
-      const serviceWithTimeout = new TrendDataService({
-        repo: mockRepo,
-        logger: mockLogger,
-        config: new TrendDataConfig({
-          requestTimeoutMs: 100 // Very short timeout for testing
-        })
-      });
-
-      await expect(serviceWithTimeout.getTrendData(mockQuery))
-        .rejects
-        .toThrow('Request timeout');
+    it('should throw error for unsupported aggregation type', async () => {
+      // Act & Assert
+      await expect(
+        service.getAggregatedTrendData(validQuery, 'invalid_aggregation' as TrendAggregation)
+      ).rejects.toThrow("Unsupported aggregation type: 'invalid_aggregation'");
     });
 
-    it('should implement circuit breaker pattern for repo failures', async () => {
-      // Simulate repeated failures
-      mockRepo.findByQuery.mockRejectedValue(new Error('DB Error'));
+    it('should handle empty aggregation result', async () => {
+      // Arrange
+      mockRepository.fetchAggregatedTrendData.mockResolvedValue([]);
 
-      // First 5 calls should attempt the repo
-      for (let i = 0; i < 5; i++) {
-        await expect(service.getTrendData(mockQuery)).rejects.toThrow();
-      }
+      // Act
+      const result = await service.getAggregatedTrendData(validQuery, 'monthly');
 
-      // 6th call should trigger circuit breaker
-      await expect(service.getTrendData(mockQuery))
-        .rejects
-        .toThrow('Circuit breaker is open');
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Circuit breaker opened due to repeated failures',
+      // Assert
+      expect(result).toEqual([]);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'No aggregated data found for query',
         expect.any(Object)
       );
     });
   });
 
-  describe('Layer 6: UI/Consumer Contract', () => {
-    it('should return data in expected format for UI consumption', async () => {
-      mockRepo.findByQuery.mockResolvedValue([mockTrendData]);
+  describe('validateQuery', () => {
+    it('should return true for valid query', () => {
+      // Act
+      const isValid = (service as any).validateQuery(validQuery);
 
-      const result = await service.getTrendData(mockQuery);
-
-      // Verify response structure matches UI expectations
-      expect(result).toMatchObject({
-        data: expect.arrayContaining([
-          expect.objectContaining({
-            id: expect.any(String),
-            metricType: expect.any(String),
-            value: expect.any(Number),
-            timestamp: expect.any(Date)
-          })
-        ]),
-        totalCount: expect.any(Number),
-        hasMore: expect.any(Boolean)
-      });
+      // Assert
+      expect(isValid).toBe(true);
     });
 
-    it('should support cursor-based pagination for infinite scroll', async () => {
-      const firstPageQuery: TrendDataQuery = {
-        ...mockQuery,
-        limit: 2
+    it('should return false for query with missing metric', () => {
+      // Arrange
+      const invalidQuery = { ...validQuery, metric: undefined as unknown as TrendMetric };
+
+      // Act
+      const isValid = (service as any).validateQuery(invalidQuery);
+
+      // Assert
+      expect(isValid).toBe(false);
+    });
+
+    it('should return false for query with invalid date objects', () => {
+      // Arrange
+      const invalidQuery: TrendDataQuery = {
+        ...validQuery,
+        timeRange: {
+          start: new Date('invalid'),
+          end: new Date('2024-01-31T00:00:00Z'),
+        },
       };
 
-      const mockData = [
-        { ...mockTrendData, id: 'trend-1' },
-        { ...mockTrendData, id: 'trend-2' },
-        { ...mockTrendData, id: 'trend-3' }
+      // Act
+      const isValid = (service as any).validateQuery(invalidQuery);
+
+      // Assert
+      expect(isValid).toBe(false);
+    });
+  });
+
+  describe('calculateTrendDirection', () => {
+    it('should return "increasing" for upward trend', () => {
+      // Arrange
+      const increasingData: TrendData[] = [
+        { ...mockTrendData[0], value: 10 },
+        { ...mockTrendData[1], value: 20 },
       ];
 
-      mockRepo.findByQuery.mockResolvedValue(mockData.slice(0, 2));
+      // Act
+      const direction = service.calculateTrendDirection(increasingData);
 
-      const firstPage = await service.getTrendData(firstPageQuery);
-
-      expect(firstPage.hasMore).toBe(true);
-      expect(firstPage.nextCursor).toBeDefined();
-
-      // Simulate fetching next page
-      mockRepo.findByQuery.mockResolvedValue(mockData.slice(2));
-      
-      const secondPage = await service.getTrendData({
-        ...firstPageQuery,
-        cursor: firstPage.nextCursor
-      });
-
-      expect(secondPage.data).toHaveLength(1);
-      expect(secondPage.hasMore).toBe(false);
+      // Assert
+      expect(direction).toBe('increasing');
     });
 
-    it('should provide metadata for chart rendering', async () => {
-      mockRepo.findByQuery.mockResolvedValue([mockTrendData]);
+    it('should return "decreasing" for downward trend', () => {
+      // Arrange
+      const decreasingData: TrendData[] = [
+        { ...mockTrendData[0], value: 20 },
+        { ...mockTrendData[1], value: 10 },
+      ];
 
-      const result = await service.getTrendData(mockQuery, {
-        includeChartMetadata: true
-      });
+      // Act
+      const direction = service.calculateTrendDirection(decreasingData);
 
-      expect(result.chartMetadata).toMatchObject({
-        yAxisMin: expect.any(Number),
-        yAxisMax: expect.any(Number),
-        suggestedGranularity: expect.any(String),
-        dataPoints: expect.any(Number)
-      });
+      // Assert
+      expect(direction).toBe('decreasing');
+    });
+
+    it('should return "stable" for flat trend', () => {
+      // Arrange
+      const stableData: TrendData[] = [
+        { ...mockTrendData[0], value: 15 },
+        { ...mockTrendData[1], value: 15 },
+      ];
+
+      // Act
+      const direction = service.calculateTrendDirection(stableData);
+
+      // Assert
+      expect(direction).toBe('stable');
+    });
+
+    it('should throw error for empty data array', () => {
+      // Act & Assert
+      expect(() => service.calculateTrendDirection([])).toThrow(
+        'Cannot calculate trend direction for empty data array'
+      );
+    });
+
+    it('should throw error for single data point', () => {
+      // Act & Assert
+      expect(() => service.calculateTrendDirection([mockTrendData[0]])).toThrow(
+        'At least two data points required to calculate trend direction'
+      );
     });
   });
 
-  describe('Error Handling', () => {
-    it('should wrap unknown errors in service-specific error', async () => {
-      mockRepo.findByQuery.mockRejectedValue('string error'); // Non-Error rejection
+  describe('calculateStatistics', () => {
+    it('should calculate correct statistics for data array', () => {
+      // Arrange
+      const data: TrendData[] = [
+        { ...mockTrendData[0], value: 10 },
+        { ...mockTrendData[1], value: 20 },
+        { ...mockTrendData[0], value: 30 },
+      ];
 
-      await expect(service.getTrendData(mockQuery))
-        .rejects
-        .toThrow('Unexpected error in TrendDataService');
+      // Act
+      const stats = service.calculateStatistics(data);
+
+      // Assert
+      expect(stats).toEqual({
+        mean: 20,
+        median: 20,
+        min: 10,
+        max: 30,
+        stdDev: expect.any(Number),
+        count: 3,
+      });
     });
 
-    it('should preserve error context for debugging', async () => {
-      const originalError = new Error('Original DB error');
-      mockRepo.findByQuery.mockRejectedValue(originalError);
+    it('should handle single data point', () => {
+      // Arrange
+      const singleData: TrendData[] = [{ ...mockTrendData[0], value: 42 }];
 
+      // Act
+      const stats = service.calculateStatistics(singleData);
+
+      // Assert
+      expect(stats.stdDev).toBe(0);
+      expect(stats.mean).toBe(42);
+    });
+
+    it('should throw error for empty data array', () => {
+      // Act & Assert
+      expect(() => service.calculateStatistics([])).toThrow(
+        'Cannot calculate statistics for empty data array'
+      );
+    });
+  });
+
+  describe('healthCheck', () => {
+    it('should return healthy status when repository is available', async () => {
+      // Arrange
+      mockRepository.healthCheck.mockResolvedValue({ healthy: true });
+
+      // Act
+      const health = await service.healthCheck();
+
+      // Assert
+      expect(health).toEqual({ healthy: true, service: 'TrendDataService' });
+    });
+
+    it('should return unhealthy status when repository check fails', async () => {
+      // Arrange
+      mockRepository.healthCheck.mockRejectedValue(new Error('DB unreachable'));
+
+      // Act
+      const health = await service.healthCheck();
+
+      // Assert
+      expect(health).toEqual({
+        healthy: false,
+        service: 'TrendDataService',
+        error: 'DB unreachable',
+      });
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('error handling', () => {
+    it('should wrap errors with proper context', async () => {
+      // Arrange
+      const originalError = new Error('Original error');
+      mockRepository.fetchTrendData.mockRejectedValue(originalError);
+
+      // Act & Assert
       try {
-        await service.getTrendData(mockQuery);
-        fail('Should have thrown');
-      } catch (error: any) {
-        expect(error.cause).toBe(originalError);
-        expect(error.context).toMatchObject({
-          service: 'TrendDataService',
-          operation: 'getTrendData',
-          query: expect.any(Object)
-        });
+        await service.getTrendData(validQuery);
+        fail('Expected error to be thrown');
+      } catch (error) {
+        const trendError = error as TrendDataError;
+        expect(trendError.message).toContain('Failed to fetch trend data');
+        expect(trendError.code).toBe('TREND_DATA_FETCH_ERROR');
+        expect(trendError.originalError).toBe(originalError);
       }
     });
+
+    it('should handle timeout errors specifically', async () => {
+      // Arrange
+      const timeoutError = new Error('Query timeout');
+      timeoutError.name = 'TimeoutError';
+      mockRepository.fetchTrendData.mockRejectedValue(timeoutError);
+
+      // Act & Assert
+      await expect(service.getTrendData(validQuery)).rejects.toThrow(
+        'Trend data query timed out'
+      );
+    });
   });
 
-  describe('Logging', () => {
-    it('should log successful operations at info level', async () => {
-      mockRepo.findByQuery.mockResolvedValue([mockTrendData]);
+  describe('caching behavior', () => {
+    it('should cache repeated identical queries', async () => {
+      // Arrange
+      const mockResult: TrendDataResult = {
+        data: mockTrendData,
+        totalCount: 2,
+        hasMore: false,
+      };
+      mockRepository.fetchTrendData.mockResolvedValue(mockResult);
 
-      await service.getTrendData(mockQuery);
+      // Act
+      await service.getTrendData(validQuery);
+      await service.getTrendData(validQuery); // Same query again
 
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Successfully retrieved trend data',
-        expect.objectContaining({
-          recordCount: 1,
-          queryDurationMs: expect.any(Number)
-        })
+      // Assert
+      expect(mockRepository.fetchTrendData).toHaveBeenCalledTimes(1);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Returning cached trend data'
       );
     });
 
-    it('should include correlation IDs in logs', async () => {
-      const correlationId = 'corr-abc-123';
-      
-      await service.getTrendData(mockQuery, { correlationId });
+    it('should bypass cache when cache flag is false', async () => {
+      // Arrange
+      const mockResult: TrendDataResult = {
+        data: mockTrendData,
+        totalCount: 2,
+        hasMore: false,
+      };
+      mockRepository.fetchTrendData.mockResolvedValue(mockResult);
 
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          correlationId
-        })
-      );
+      // Act
+      await service.getTrendData(validQuery);
+      await service.getTrendData({ ...validQuery, useCache: false });
+
+      // Assert
+      expect(mockRepository.fetchTrendData).toHaveBeenCalledTimes(2);
     });
   });
 });
