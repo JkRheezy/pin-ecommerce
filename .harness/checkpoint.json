@@ -1,60 +1,48 @@
 {
-  "timestamp": 1775129798585,
+  "timestamp": 1775130572342,
   "currentTask": {
-    "id": "evolution-coverage-1775121548093-hh1yc",
-    "title": "Add tests for trends.ts",
-    "description": "File src\\lib\\ai\\types\\trends.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\ai\\types\\trends.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\ai\\types\\trends.ts\n  Location: src\\lib\\ai\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\ai\\types\\trends.ts",
+    "id": "evolution-longfile-1775128884578-bt5kw",
+    "title": "Refactor long file: trends.ts",
+    "description": "File src\\lib\\types\\trends.ts has 785 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 785 lines\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
     "requirements": [
-      "Create test file: src\\lib\\ai\\types\\trends.test.ts",
-      "Test core functionality",
-      "Test edge cases",
-      "Tests must pass in CI",
-      "Coverage report generated"
+      "Identify cohesive groups of functionality",
+      "Extract into separate modules",
+      "Update imports"
     ],
     "priority": "medium",
-    "status": "failed",
-    "category": "testing",
-    "maxDuration": 6480000,
-    "createdAt": "2026-04-02T09:19:08.121Z",
-    "startedAt": "2026-04-02T11:15:45.027Z",
-    "result": {
-      "status": "failed",
-      "error": "fatal: a branch named 'harness/evolution-coverage-1775121548093-hh1yc' already exists\n",
-      "canRetry": false,
-      "duration": 264152,
-      "completedAt": "2026-04-02T11:20:09.178Z"
-    },
-    "fixTaskId": "fix-1775128809179"
+    "status": "running",
+    "category": "technical_debt",
+    "maxDuration": 3600000,
+    "createdAt": "2026-04-02T11:21:24.609Z",
+    "startedAt": "2026-04-02T11:39:20.739Z"
   },
   "stats": {
     "completed": 0,
-    "failed": 10,
+    "failed": 12,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
     "failed": 2,
     "escalated": 0,
-    "startTime": 1775128298555
+    "startTime": 1775129072306
   },
   "queueState": {
     "queue": [
       {
-        "id": "evolution-coverage-1775121548093-nhb98",
-        "title": "Add tests for TrendDataService.ts",
-        "description": "File src\\lib\\ai\\services\\TrendDataService.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\ai\\services\\TrendDataService.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\ai\\services\\TrendDataService.ts\n  Location: src\\lib\\ai\\services\\TrendDataService.ts\n\n📁 Related Files:\n- src\\lib\\ai\\services\\TrendDataService.ts",
+        "id": "evolution-longfile-1775128884580-4pj5y",
+        "title": "Refactor long file: RedditTrendsSource.ts",
+        "description": "File src\\lib\\ai\\datasources\\RedditTrendsSource.ts has 346 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 346 lines\n  Location: src\\lib\\ai\\datasources\\RedditTrendsSource.ts\n\n📁 Related Files:\n- src\\lib\\ai\\datasources\\RedditTrendsSource.ts",
         "requirements": [
-          "Create test file: src\\lib\\ai\\services\\TrendDataService.test.ts",
-          "Test core functionality",
-          "Test edge cases",
-          "Tests must pass in CI",
-          "Coverage report generated"
+          "Identify cohesive groups of functionality",
+          "Extract into separate modules",
+          "Update imports"
         ],
         "priority": "medium",
         "status": "pending",
-        "category": "testing",
-        "maxDuration": 6480000,
-        "createdAt": "2026-04-02T09:19:08.121Z"
+        "category": "technical_debt",
+        "maxDuration": 3600000,
+        "createdAt": "2026-04-02T11:21:24.609Z"
       }
     ],
     "activeTasks": [
@@ -93,6 +81,56 @@
         "maxDuration": 6480000,
         "createdAt": "2026-04-02T09:19:08.121Z",
         "startedAt": "2026-04-02T09:22:49.085Z"
+      },
+      {
+        "id": "evolution-coverage-1775121548093-hh1yc",
+        "title": "Add tests for trends.ts",
+        "description": "File src\\lib\\ai\\types\\trends.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\ai\\types\\trends.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\ai\\types\\trends.ts\n  Location: src\\lib\\ai\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\ai\\types\\trends.ts",
+        "requirements": [
+          "Create test file: src\\lib\\ai\\types\\trends.test.ts",
+          "Test core functionality",
+          "Test edge cases",
+          "Tests must pass in CI",
+          "Coverage report generated"
+        ],
+        "priority": "medium",
+        "status": "running",
+        "category": "testing",
+        "maxDuration": 6480000,
+        "createdAt": "2026-04-02T09:19:08.121Z",
+        "startedAt": "2026-04-02T11:15:45.027Z"
+      },
+      {
+        "id": "evolution-apidoc-1775128884594-grlc8",
+        "title": "Create API documentation (OpenAPI/Swagger)",
+        "description": "Project has 8 API routes but no OpenAPI documentation.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create openapi.yaml\n2. Document all API endpoints\n3. Add request/response schemas\n\n📋 Evidence:\n- [missing_feature] No API docs for 8 routes",
+        "requirements": [
+          "Create openapi.yaml",
+          "Document all API endpoints",
+          "Add request/response schemas"
+        ],
+        "priority": "medium",
+        "status": "running",
+        "category": "documentation",
+        "maxDuration": 4320000,
+        "createdAt": "2026-04-02T11:21:24.609Z",
+        "startedAt": "2026-04-02T11:21:24.612Z"
+      },
+      {
+        "id": "evolution-longfile-1775128884578-bt5kw",
+        "title": "Refactor long file: trends.ts",
+        "description": "File src\\lib\\types\\trends.ts has 785 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 785 lines\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
+        "requirements": [
+          "Identify cohesive groups of functionality",
+          "Extract into separate modules",
+          "Update imports"
+        ],
+        "priority": "medium",
+        "status": "running",
+        "category": "technical_debt",
+        "maxDuration": 3600000,
+        "createdAt": "2026-04-02T11:21:24.609Z",
+        "startedAt": "2026-04-02T11:39:20.739Z"
       }
     ]
   },

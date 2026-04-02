@@ -1,15 +1,20 @@
 /**
  * @fileoverview Trend Data Source Types
  * 
- * This module defines the type layer for trend data sources in the Harness-Engineering
- * six-layer architecture. These types represent the core data structures for trend
- * analysis, metrics collection, and time-series data visualization.
+ * @deprecated This file has been deprecated. Please use the new trend types from
+ * `@harness-engineering/trends-types` package or the consolidated types in
+ * `src/types/trends/index.ts` instead.
+ * 
+ * This module will be removed in version 3.0.0.
  * 
  * Layer: Types (Layer 1)
  * Dependencies: None (base types)
  */
 
 import { z } from 'zod';
+
+// TODO: [DEPRECATED-1234] Remove this file in v3.0.0
+// Migration guide: https://docs.harness-engineering.io/migrations/trends-types
 
 // ============================================================================
 // Core Trend Types

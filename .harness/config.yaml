@@ -65,6 +65,37 @@ github:
   repo: JkRheezy/pin-ecommerce
   token: ${GITHUB_TOKEN}
 
+# Evolution 配置 - 控制自动进化策略
+evolution:
+  enabled: true
+  checkInterval: 300000
+  maxOpportunitiesPerAnalysis: 5
+  minImpactThreshold: 5
+  categories:
+    technical: true    # 技术债务（代码质量、重构）
+    business: true     # 业务功能（需要配置 businessContext）
+    ux: true           # 用户体验
+
+# 业务上下文 - 让 Loop 理解业务需求并生成功能代码
+businessContext:
+  domain: "e-commerce"  # 领域：电商
+  goals:
+    - "实现多智能体选品系统"
+    - "集成 Reddit/Google Trends 趋势分析"
+    - "提供产品创意生成功能"
+    - "支持一键上架到电商平台"
+  userFlows:
+    - name: "趋势发现"
+      steps: ["浏览趋势", "选择品类", "查看详情"]
+    - name: "产品创意"
+      steps: ["生成创意", "评估可行性", "保存方案"]
+    - name: "选品决策"
+      steps: ["AI推荐", "人工确认", "批量导出"]
+  constraints:
+    - "必须支持中文界面"
+    - "响应时间 < 3秒"
+    - "支持移动端访问"
+
 # 通知配置
 notifications:
   slack:
