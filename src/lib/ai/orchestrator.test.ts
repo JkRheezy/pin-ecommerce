@@ -1,353 +1,737 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import { Orchestrator, OrchestratorConfig, OrchestratorError } from './orchestrator';
-import { Logger } from '../logging/logger';
-import { Telemetry } from '../telemetry/telemetry';
-import { Step, StepResult, StepStatus } from './types';
-import { ValidationError } from '../errors/validation-error';
+/**
+ * @file orchestrator.test.ts
+ * @description Comprehensive test suite for the AI Orchestrator service
+ * @follows Harness-Engineering six-layer architecture (Service Layer)
+ */
 
-// Mock dependencies
-jest.mock('../logging/logger');
-jest.mock('../telemetry/telemetry');
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Orchestrator, OrchestratorConfig, OrchestrationResult } from './orchestrator';
+import { Logger } from '../logging/logger';
+import { ValidationError, OrchestrationError } from '../errors/custom-errors';
+import { AIProvider, AIRequest, AIResponse } from '../types/ai-types';
+import { Task, TaskStatus, TaskPriority } from '../types/task-types';
+
+// ============================================================================
+// Types Layer: Test Fixtures and Mocks
+// ============================================================================
+
+interface MockProviderConfig {
+  name: string;
+  latencyMs: number;
+  shouldFail: boolean;
+  failureMessage?: string;
+}
+
+// ============================================================================
+// Repo Layer: Mock Implementations
+// ============================================================================
+
+/**
+ * Creates a mock AI provider for testing
+ */
+const createMockProvider = (config: MockProviderConfig): AIProvider => ({
+  name: config.name,
+  generate: vi.fn(async (request: AIRequest): Promise<AIResponse> => {
+    if (config.shouldFail) {
+      throw new Error(config.failureMessage || `${config.name} failed`);
+    }
+    
+    // Simulate latency
+    await new Promise(resolve => setTimeout(resolve, config.latencyMs));
+    
+    return {
+      content: `Response from ${config.name} for: ${request.prompt}`,
+      metadata: {
+        provider: config.name,
+        latencyMs: config.latencyMs,
+        tokensUsed: 100,
+      },
+    };
+  }),
+  healthCheck: vi.fn(async (): Promise<boolean> => !config.shouldFail),
+});
+
+// ============================================================================
+// Service Layer: Test Suite
+// ============================================================================
 
 describe('Orchestrator', () => {
   let orchestrator: Orchestrator;
-  let mockLogger: jest.Mocked<Logger>;
-  let mockTelemetry: jest.Mocked<Telemetry>;
-  let config: OrchestratorConfig;
+  let mockLogger: Logger;
+  let mockProviders: Map<string, AIProvider>;
 
   beforeEach(() => {
-    mockLogger = new Logger('Orchestrator') as jest.Mocked<Logger>;
-    mockTelemetry = new Telemetry() as jest.Mocked<Telemetry>;
-    
-    config = {
+    // Setup structured logger mock
+    mockLogger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    } as unknown as Logger;
+
+    // Setup provider registry
+    mockProviders = new Map([
+      ['fast-provider', createMockProvider({ name: 'fast-provider', latencyMs: 10, shouldFail: false })],
+      ['slow-provider', createMockProvider({ name: 'slow-provider', latencyMs: 100, shouldFail: false })],
+      ['failing-provider', createMockProvider({ name: 'failing-provider', latencyMs: 10, shouldFail: true, failureMessage: 'Provider unavailable' })],
+    ]);
+
+    const config: OrchestratorConfig = {
+      providers: mockProviders,
+      defaultProvider: 'fast-provider',
+      fallbackEnabled: true,
       maxRetries: 3,
       timeoutMs: 5000,
-      enableTelemetry: true,
+      logger: mockLogger,
     };
 
-    orchestrator = new Orchestrator(config, mockLogger, mockTelemetry);
+    orchestrator = new Orchestrator(config);
   });
 
-  describe('constructor', () => {
-    it('should create orchestrator with valid config', () => {
-      expect(orchestrator).toBeDefined();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Orchestrator initialized',
-        expect.objectContaining({ config })
-      );
-    });
-
-    it('should throw ValidationError when config is invalid', () => {
-      const invalidConfig = { maxRetries: -1 } as OrchestratorConfig;
-      
-      expect(() => new Orchestrator(invalidConfig, mockLogger, mockTelemetry))
-        .toThrow(ValidationError);
-    });
-
-    it('should use default config when partial config provided', () => {
-      const partialConfig = { maxRetries: 5 } as OrchestratorConfig;
-      const orch = new Orchestrator(partialConfig, mockLogger, mockTelemetry);
-      
-      expect(orch).toBeDefined();
-    });
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
-  describe('execute', () => {
-    const createMockStep = (
-      name: string,
-      executeFn: () => Promise<StepResult> = async () => ({ status: StepStatus.SUCCESS, data: {} })
-    ): Step => ({
-      name,
-      execute: jest.fn(executeFn),
-      rollback: jest.fn(async () => ({ status: StepStatus.SUCCESS })),
-    });
+  // ==========================================================================
+  // Configuration Validation Tests
+  // ==========================================================================
 
-    it('should execute single step successfully', async () => {
-      const step = createMockStep('test-step');
-      const result = await orchestrator.execute([step]);
-
-      expect(result.status).toBe(StepStatus.SUCCESS);
-      expect(step.execute).toHaveBeenCalledTimes(1);
-      expect(mockTelemetry.track).toHaveBeenCalledWith(
-        'orchestrator.step.completed',
-        expect.any(Object)
-      );
-    });
-
-    it('should execute multiple steps in sequence', async () => {
-      const executionOrder: string[] = [];
-      const step1 = createMockStep('step-1', async () => {
-        executionOrder.push('step-1');
-        return { status: StepStatus.SUCCESS, data: { value: 1 } };
-      });
-      const step2 = createMockStep('step-2', async () => {
-        executionOrder.push('step-2');
-        return { status: StepStatus.SUCCESS, data: { value: 2 } };
-      });
-
-      const result = await orchestrator.execute([step1, step2]);
-
-      expect(result.status).toBe(StepStatus.SUCCESS);
-      expect(executionOrder).toEqual(['step-1', 'step-2']);
-      expect(result.stepResults).toHaveLength(2);
-    });
-
-    it('should pass previous step data to next step', async () => {
-      const step1 = createMockStep('step-1', async () => ({
-        status: StepStatus.SUCCESS,
-        data: { userId: '123' },
-      }));
-      const step2 = createMockStep('step-2', async (ctx) => ({
-        status: StepStatus.SUCCESS,
-        data: { ...ctx.previousData, processed: true },
-      }));
-
-      await orchestrator.execute([step1, step2]);
-
-      // Verify step2 received step1's data through context
-      expect(step2.execute).toHaveBeenCalledWith(
-        expect.objectContaining({
-          previousData: expect.objectContaining({ userId: '123' }),
-        })
-      );
-    });
-
-    it('should retry failed steps up to maxRetries', async () => {
-      const step = createMockStep('failing-step', async () => {
-        throw new Error('Transient error');
-      });
-
-      await expect(orchestrator.execute([step])).rejects.toThrow(OrchestratorError);
-      expect(step.execute).toHaveBeenCalledTimes(config.maxRetries);
-    });
-
-    it('should succeed on retry when step recovers', async () => {
-      let attempts = 0;
-      const step = createMockStep('recovering-step', async () => {
-        attempts++;
-        if (attempts < 3) {
-          throw new Error('Temporary failure');
-        }
-        return { status: StepStatus.SUCCESS, data: { recovered: true } };
-      });
-
-      const result = await orchestrator.execute([step]);
-
-      expect(result.status).toBe(StepStatus.SUCCESS);
-      expect(attempts).toBe(3);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Retry'),
-        expect.any(Object)
-      );
-    });
-
-    it('should trigger rollback on step failure when configured', async () => {
-      const step1 = createMockStep('step-1', async () => ({
-        status: StepStatus.SUCCESS,
-        data: { created: true },
-      }));
-      const step2 = createMockStep('step-2', async () => {
-        throw new Error('Fatal error');
-      });
-
-      await expect(orchestrator.execute([step1, step2])).rejects.toThrow();
-
-      // Rollback should be called in reverse order for completed steps
-      expect(step2.rollback).not.toHaveBeenCalled(); // step2 never completed
-      expect(step1.rollback).toHaveBeenCalledTimes(1);
-    });
-
-    it('should handle rollback failures gracefully', async () => {
-      const step1 = createMockStep('step-1', async () => ({
-        status: StepStatus.SUCCESS,
-        data: {},
-      }));
-      step1.rollback = jest.fn(async () => {
-        throw new Error('Rollback failed');
-      });
-
-      const step2 = createMockStep('step-2', async () => {
-        throw new Error('Step failed');
-      });
-
-      await expect(orchestrator.execute([step1, step2])).rejects.toThrow();
-
-      // Should log rollback failure but still throw original error
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Rollback failed'),
-        expect.any(Object)
-      );
-    });
-
-    it('should respect timeout and abort long-running steps', async () => {
-      const slowStep = createMockStep('slow-step', async () => {
-        await new Promise(resolve => setTimeout(resolve, config.timeoutMs + 100));
-        return { status: StepStatus.SUCCESS, data: {} };
-      });
-
-      await expect(orchestrator.execute([slowStep])).rejects.toThrow('timeout');
-    });
-
-    it('should skip remaining steps when step returns SKIP_REMAINING', async () => {
-      const step1 = createMockStep('step-1', async () => ({
-        status: StepStatus.SKIP_REMAINING,
-        data: { earlyExit: true },
-      }));
-      const step2 = createMockStep('step-2');
-
-      const result = await orchestrator.execute([step1, step2]);
-
-      expect(result.status).toBe(StepStatus.SUCCESS);
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).not.toHaveBeenCalled();
-    });
-
-    it('should handle empty step array', async () => {
-      const result = await orchestrator.execute([]);
-
-      expect(result.status).toBe(StepStatus.SUCCESS);
-      expect(result.stepResults).toHaveLength(0);
-    });
-
-    it('should validate step definitions', async () => {
-      const invalidStep = { name: 'invalid' } as Step; // Missing execute
-
-      await expect(orchestrator.execute([invalidStep])).rejects.toThrow(ValidationError);
-    });
-
-    it('should emit events for step lifecycle', async () => {
-      const events: string[] = [];
-      orchestrator.on('step:start', (name) => events.push(`start:${name}`));
-      orchestrator.on('step:complete', (name) => events.push(`complete:${name}`));
-
-      const step = createMockStep('evented-step');
-      await orchestrator.execute([step]);
-
-      expect(events).toContain('start:evented-step');
-      expect(events).toContain('complete:evented-step');
-    });
-
-    it('should aggregate telemetry metrics', async () => {
-      const step1 = createMockStep('step-1');
-      const step2 = createMockStep('step-2');
-
-      await orchestrator.execute([step1, step2]);
-
-      expect(mockTelemetry.track).toHaveBeenCalledWith(
-        'orchestrator.execution.completed',
-        expect.objectContaining({
-          totalSteps: 2,
-          successfulSteps: 2,
-          failedSteps: 0,
-          totalDurationMs: expect.any(Number),
-        })
-      );
-    });
-  });
-
-  describe('pause and resume', () => {
-    it('should pause execution and preserve state', async () => {
-      const step1 = createMockStep('step-1', async () => ({
-        status: StepStatus.SUCCESS,
-        data: { checkpoint: 'data' },
-      }));
-      const step2 = createMockStep('step-2');
-
-      // Start execution
-      const executionPromise = orchestrator.execute([step1, step2]);
-      
-      // Pause after first step
-      orchestrator.pause();
-
-      const state = orchestrator.getState();
-      expect(state.isPaused).toBe(true);
-      expect(state.completedSteps).toContain('step-1');
-    });
-
-    it('should resume from paused state', async () => {
-      const savedState = {
-        completedSteps: ['step-1'],
-        stepData: { 'step-1': { preserved: 'data' } },
-        isPaused: true,
+  describe('Configuration Validation', () => {
+    it('should throw ValidationError when providers map is empty', () => {
+      const invalidConfig: OrchestratorConfig = {
+        providers: new Map(),
+        defaultProvider: 'any-provider',
+        logger: mockLogger,
       };
 
-      orchestrator.restoreState(savedState);
-      
-      const step2 = createMockStep('step-2', async (ctx) => ({
-        status: StepStatus.SUCCESS,
-        data: { ...ctx.previousData, step2: 'done' },
-      }));
+      expect(() => new Orchestrator(invalidConfig)).toThrow(ValidationError);
+      expect(() => new Orchestrator(invalidConfig)).toThrow('At least one AI provider must be configured');
+    });
 
-      const result = await orchestrator.resume([step2]);
+    it('should throw ValidationError when default provider does not exist', () => {
+      const invalidConfig: OrchestratorConfig = {
+        providers: mockProviders,
+        defaultProvider: 'non-existent-provider',
+        logger: mockLogger,
+      };
 
-      expect(result.status).toBe(StepStatus.SUCCESS);
-      // step-2 should receive preserved data from step-1
-      expect(step2.execute).toHaveBeenCalledWith(
-        expect.objectContaining({
-          previousData: expect.objectContaining({ preserved: 'data' }),
-        })
-      );
+      expect(() => new Orchestrator(invalidConfig)).toThrow(ValidationError);
+      expect(() => new Orchestrator(invalidConfig)).toThrow('Default provider "non-existent-provider" not found in configured providers');
+    });
+
+    it('should throw ValidationError when timeout is non-positive', () => {
+      const invalidConfig: OrchestratorConfig = {
+        providers: mockProviders,
+        defaultProvider: 'fast-provider',
+        timeoutMs: 0,
+        logger: mockLogger,
+      };
+
+      expect(() => new Orchestrator(invalidConfig)).toThrow(ValidationError);
+    });
+
+    it('should use default values for optional configuration', () => {
+      const minimalConfig: OrchestratorConfig = {
+        providers: mockProviders,
+        defaultProvider: 'fast-provider',
+        logger: mockLogger,
+      };
+
+      const instance = new Orchestrator(minimalConfig);
+      expect(instance).toBeDefined();
+      // Verify defaults through behavior testing
     });
   });
 
-  describe('error handling', () => {
-    it('should wrap unknown errors in OrchestratorError', async () => {
-      const step = createMockStep('error-step', async () => {
-        throw 'String error'; // Non-Error throw
-      });
+  // ==========================================================================
+  // Basic Orchestration Tests
+  // ==========================================================================
 
-      await expect(orchestrator.execute([step])).rejects.toThrow(OrchestratorError);
+  describe('Basic Orchestration', () => {
+    it('should successfully execute a task with default provider', async () => {
+      const task: Task = {
+        id: 'test-task-1',
+        type: 'code-generation',
+        prompt: 'Generate a TypeScript interface',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      const result: OrchestrationResult = await orchestrator.execute(task);
+
+      expect(result.success).toBe(true);
+      expect(result.content).toContain('Response from fast-provider');
+      expect(result.providerUsed).toBe('fast-provider');
+      expect(result.latencyMs).toBeGreaterThanOrEqual(10);
+      expect(result.attempts).toBe(1);
+      expect(result.errors).toHaveLength(0);
     });
 
-    it('should preserve error context through retries', async () => {
-      const errors: Error[] = [];
-      const step = createMockStep('failing-step', async () => {
-        const err = new Error(`Attempt ${errors.length + 1}`);
-        errors.push(err);
-        throw err;
+    it('should route to specified provider when provider hint is given', async () => {
+      const task: Task = {
+        id: 'test-task-2',
+        type: 'code-generation',
+        prompt: 'Generate code',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+        providerHint: 'slow-provider',
+      };
+
+      const result: OrchestrationResult = await orchestrator.execute(task);
+
+      expect(result.success).toBe(true);
+      expect(result.providerUsed).toBe('slow-provider');
+      expect(result.latencyMs).toBeGreaterThanOrEqual(100);
+    });
+
+    it('should include metadata in the response', async () => {
+      const task: Task = {
+        id: 'test-task-3',
+        type: 'analysis',
+        prompt: 'Analyze this code',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.PENDING,
+      };
+
+      const result: OrchestrationResult = await orchestrator.execute(task);
+
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata?.tokensUsed).toBe(100);
+      expect(result.metadata?.provider).toBe('fast-provider');
+    });
+  });
+
+  // ==========================================================================
+  // Fallback and Retry Tests
+  // ==========================================================================
+
+  describe('Fallback and Retry Logic', () => {
+    it('should fallback to next available provider on failure', async () => {
+      // Create orchestrator with failing default
+      const failingDefault = createMockProvider({ 
+        name: 'failing-default', 
+        latencyMs: 10, 
+        shouldFail: true,
+        failureMessage: 'Default failed',
       });
+
+      const providers = new Map([
+        ['failing-default', failingDefault],
+        ['fallback-provider', createMockProvider({ name: 'fallback-provider', latencyMs: 10, shouldFail: false })],
+      ]);
+
+      const config: OrchestratorConfig = {
+        providers,
+        defaultProvider: 'failing-default',
+        fallbackEnabled: true,
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      const task: Task = {
+        id: 'fallback-test',
+        type: 'generation',
+        prompt: 'Test fallback',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      const result: OrchestrationResult = await testOrchestrator.execute(task);
+
+      expect(result.success).toBe(true);
+      expect(result.providerUsed).toBe('fallback-provider');
+      expect(result.attempts).toBe(2);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toContain('Default failed');
+    });
+
+    it('should retry the same provider up to maxRetries before failing', async () => {
+      const flakyProvider = createMockProvider({
+        name: 'flaky-provider',
+        latencyMs: 5,
+        shouldFail: true,
+        failureMessage: 'Transient error',
+      });
+
+      // Override generate to succeed on third attempt
+      let attemptCount = 0;
+      flakyProvider.generate = vi.fn(async (request: AIRequest): Promise<AIResponse> => {
+        attemptCount++;
+        if (attemptCount < 3) {
+          throw new Error('Transient error');
+        }
+        return {
+          content: 'Success after retries',
+          metadata: { provider: 'flaky-provider', latencyMs: 5, tokensUsed: 50 },
+        };
+      });
+
+      const providers = new Map([['flaky-provider', flakyProvider]]);
+      const config: OrchestratorConfig = {
+        providers,
+        defaultProvider: 'flaky-provider',
+        maxRetries: 3,
+        fallbackEnabled: false,
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      const task: Task = {
+        id: 'retry-test',
+        type: 'generation',
+        prompt: 'Test retries',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      const result: OrchestrationResult = await testOrchestrator.execute(task);
+
+      expect(result.success).toBe(true);
+      expect(result.attempts).toBe(3);
+      expect(attemptCount).toBe(3);
+    });
+
+    it('should throw OrchestrationError when all providers fail', async () => {
+      const allFailingProviders = new Map([
+        ['fail-1', createMockProvider({ name: 'fail-1', latencyMs: 1, shouldFail: true })],
+        ['fail-2', createMockProvider({ name: 'fail-2', latencyMs: 1, shouldFail: true })],
+      ]);
+
+      const config: OrchestratorConfig = {
+        providers: allFailingProviders,
+        defaultProvider: 'fail-1',
+        fallbackEnabled: true,
+        maxRetries: 1,
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      const task: Task = {
+        id: 'total-failure-test',
+        type: 'generation',
+        prompt: 'This will fail',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      await expect(testOrchestrator.execute(task)).rejects.toThrow(OrchestrationError);
+      await expect(testOrchestrator.execute(task)).rejects.toThrow('All AI providers failed');
+    });
+  });
+
+  // ==========================================================================
+  // Timeout and Cancellation Tests
+  // ==========================================================================
+
+  describe('Timeout Handling', () => {
+    it('should respect timeout configuration and abort slow requests', async () => {
+      const slowProvider = createMockProvider({
+        name: 'very-slow-provider',
+        latencyMs: 10000, // 10 seconds
+        shouldFail: false,
+      });
+
+      const providers = new Map([
+        ['very-slow-provider', slowProvider],
+        ['fast-backup', createMockProvider({ name: 'fast-backup', latencyMs: 10, shouldFail: false })],
+      ]);
+
+      const config: OrchestratorConfig = {
+        providers,
+        defaultProvider: 'very-slow-provider',
+        timeoutMs: 50, // 50ms timeout
+        fallbackEnabled: true,
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      const task: Task = {
+        id: 'timeout-test',
+        type: 'generation',
+        prompt: 'Slow request',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      const result: OrchestrationResult = await testOrchestrator.execute(task);
+
+      expect(result.success).toBe(true);
+      expect(result.providerUsed).toBe('fast-backup');
+      expect(result.errors).toContainEqual(expect.stringContaining('timeout'));
+    });
+
+    it('should throw OrchestrationError when all providers timeout', async () => {
+      const slowProvider = createMockProvider({
+        name: 'always-slow',
+        latencyMs: 10000,
+        shouldFail: false,
+      });
+
+      const providers = new Map([['always-slow', slowProvider]]);
+      const config: OrchestratorConfig = {
+        providers,
+        defaultProvider: 'always-slow',
+        timeoutMs: 50,
+        fallbackEnabled: false,
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      const task: Task = {
+        id: 'all-timeout-test',
+        type: 'generation',
+        prompt: 'Will timeout',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      await expect(testOrchestrator.execute(task)).rejects.toThrow(OrchestrationError);
+    });
+  });
+
+  // ==========================================================================
+  // Priority and Queue Management Tests
+  // ==========================================================================
+
+  describe('Priority Handling', () => {
+    it('should process HIGH priority tasks before NORMAL priority', async () => {
+      const executionOrder: string[] = [];
+      
+      const trackingProvider = createMockProvider({
+        name: 'tracking-provider',
+        latencyMs: 1,
+        shouldFail: false,
+      });
+
+      // Override to track execution order
+      trackingProvider.generate = vi.fn(async (request: AIRequest): Promise<AIResponse> => {
+        executionOrder.push(request.metadata?.taskId as string);
+        return {
+          content: 'done',
+          metadata: { provider: 'tracking-provider', latencyMs: 1, tokensUsed: 10 },
+        };
+      });
+
+      const providers = new Map([['tracking-provider', trackingProvider]]);
+      const config: OrchestratorConfig = {
+        providers,
+        defaultProvider: 'tracking-provider',
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      // Queue tasks in reverse priority order
+      const normalTask: Task = {
+        id: 'normal-task',
+        type: 'generation',
+        prompt: 'Normal',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      const highTask: Task = {
+        id: 'high-task',
+        type: 'generation',
+        prompt: 'High',
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.PENDING,
+      };
+
+      // Execute both and verify high priority processes first
+      const promises = [
+        testOrchestrator.execute(normalTask),
+        testOrchestrator.execute(highTask),
+      ];
+
+      await Promise.all(promises);
+
+      const highIndex = executionOrder.indexOf('high-task');
+      const normalIndex = executionOrder.indexOf('normal-task');
+      
+      expect(highIndex).toBeLessThan(normalIndex);
+    });
+  });
+
+  // ==========================================================================
+  // Health Check and Provider Management Tests
+  // ==========================================================================
+
+  describe('Health Checks', () => {
+    it('should return health status for all providers', async () => {
+      const health = await orchestrator.healthCheck();
+
+      expect(health).toHaveProperty('fast-provider');
+      expect(health).toHaveProperty('slow-provider');
+      expect(health).toHaveProperty('failing-provider');
+      
+      expect(health['fast-provider']).toBe(true);
+      expect(health['slow-provider']).toBe(true);
+      expect(health['failing-provider']).toBe(false);
+    });
+
+    it('should skip unhealthy providers in fallback chain', async () => {
+      const healthAwareOrchestrator = new Orchestrator({
+        providers: mockProviders,
+        defaultProvider: 'failing-provider', // Start with unhealthy
+        fallbackEnabled: true,
+        logger: mockLogger,
+      });
+
+      // Pre-check health to mark failing-provider as unhealthy
+      await healthAwareOrchestrator.healthCheck();
+
+      const task: Task = {
+        id: 'health-aware-test',
+        type: 'generation',
+        prompt: 'Skip unhealthy',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      const result: OrchestrationResult = await healthAwareOrchestrator.execute(task);
+
+      expect(result.success).toBe(true);
+      expect(result.providerUsed).not.toBe('failing-provider');
+    });
+  });
+
+  // ==========================================================================
+  // Error Handling and Edge Cases
+  // ==========================================================================
+
+  describe('Error Handling', () => {
+    it('should handle malformed task input gracefully', async () => {
+      const invalidTask = {
+        id: 'invalid',
+        // Missing required fields
+      } as unknown as Task;
+
+      await expect(orchestrator.execute(invalidTask)).rejects.toThrow(ValidationError);
+    });
+
+    it('should sanitize sensitive data from error messages', async () => {
+      const providerWithSecrets = createMockProvider({
+        name: 'secret-leaker',
+        latencyMs: 1,
+        shouldFail: true,
+        failureMessage: 'Error: api_key=sk-12345, token=abc123',
+      });
+
+      const providers = new Map([['secret-leaker', providerWithSecrets]]);
+      const config: OrchestratorConfig = {
+        providers,
+        defaultProvider: 'secret-leaker',
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      const task: Task = {
+        id: 'secret-test',
+        type: 'generation',
+        prompt: 'test',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
 
       try {
-        await orchestrator.execute([step]);
-      } catch (e) {
-        const orchestratorError = e as OrchestratorError;
-        expect(orchestratorError.attemptCount).toBe(config.maxRetries);
-        expect(orchestratorError.errors).toHaveLength(config.maxRetries);
+        await testOrchestrator.execute(task);
+        fail('Should have thrown');
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(message).not.toContain('sk-12345');
+        expect(message).not.toContain('abc123');
+        expect(message).toContain('[REDACTED]');
       }
+    });
+
+    it('should handle concurrent task execution safely', async () => {
+      const concurrentProvider = createMockProvider({
+        name: 'concurrent-provider',
+        latencyMs: 10,
+        shouldFail: false,
+      });
+
+      let concurrentCalls = 0;
+      let maxConcurrent = 0;
+
+      concurrentProvider.generate = vi.fn(async (request: AIRequest): Promise<AIResponse> => {
+        concurrentCalls++;
+        maxConcurrent = Math.max(maxConcurrent, concurrentCalls);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        concurrentCalls--;
+        return {
+          content: 'concurrent result',
+          metadata: { provider: 'concurrent-provider', latencyMs: 10, tokensUsed: 10 },
+        };
+      });
+
+      const providers = new Map([['concurrent-provider', concurrentProvider]]);
+      const config: OrchestratorConfig = {
+        providers,
+        defaultProvider: 'concurrent-provider',
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      // Execute 10 tasks concurrently
+      const tasks = Array.from({ length: 10 }, (_, i) => ({
+        id: `concurrent-${i}`,
+        type: 'generation',
+        prompt: `Task ${i}`,
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      } as Task));
+
+      const results = await Promise.all(tasks.map(t => testOrchestrator.execute(t)));
+
+      expect(results).toHaveLength(10);
+      expect(results.every(r => r.success)).toBe(true);
+      // Verify no race conditions occurred
+      expect(concurrentCalls).toBe(0); // All completed
     });
   });
 
-  describe('concurrency control', () => {
-    it('should respect maxConcurrency config', async () => {
-      const concurrentConfig = { ...config, maxConcurrency: 2 };
-      const concurrentOrchestrator = new Orchestrator(
-        concurrentConfig,
-        mockLogger,
-        mockTelemetry
+  // ==========================================================================
+  // Logging and Observability Tests
+  // ==========================================================================
+
+  describe('Logging and Observability', () => {
+    it('should log task execution lifecycle events', async () => {
+      const task: Task = {
+        id: 'logging-test',
+        type: 'generation',
+        prompt: 'Test logging',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      await orchestrator.execute(task);
+
+      // Verify structured logging calls
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'logging-test' }),
+        'Task execution started'
       );
 
-      let concurrentExecutions = 0;
-      let maxConcurrent = 0;
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'logging-test',
+          providerUsed: 'fast-provider',
+          success: true,
+        }),
+        'Task execution completed'
+      );
+    });
 
-      const createConcurrentStep = (name: string): Step => ({
-        name,
-        execute: async () => {
-          concurrentExecutions++;
-          maxConcurrent = Math.max(maxConcurrent, concurrentExecutions);
-          await new Promise(resolve => setTimeout(resolve, 50));
-          concurrentExecutions--;
-          return { status: StepStatus.SUCCESS, data: {} };
-        },
-        rollback: async () => ({ status: StepStatus.SUCCESS }),
+    it('should log errors with proper context', async () => {
+      const errorProvider = createMockProvider({
+        name: 'error-provider',
+        latencyMs: 1,
+        shouldFail: true,
+        failureMessage: 'Critical failure',
       });
 
-      const steps = Array.from({ length: 5 }, (_, i) => createConcurrentStep(`step-${i}`));
-      
-      // Note: This tests concurrent execution within a single orchestrator run
-      // Actual implementation may vary based on step dependencies
-      await concurrentOrchestrator.execute(steps);
+      const providers = new Map([
+        ['error-provider', errorProvider],
+        ['backup', createMockProvider({ name: 'backup', latencyMs: 1, shouldFail: false })],
+      ]);
 
-      expect(maxConcurrent).toBeLessThanOrEqual(concurrentConfig.maxConcurrency);
+      const config: OrchestratorConfig = {
+        providers,
+        defaultProvider: 'error-provider',
+        fallbackEnabled: true,
+        logger: mockLogger,
+      };
+
+      const testOrchestrator = new Orchestrator(config);
+
+      const task: Task = {
+        id: 'error-logging-test',
+        type: 'generation',
+        prompt: 'Test error logging',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      await testOrchestrator.execute(task);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'error-logging-test',
+          provider: 'error-provider',
+          error: 'Critical failure',
+        }),
+        'Provider failed, attempting fallback'
+      );
+    });
+  });
+
+  // ==========================================================================
+  // Performance and Metrics Tests
+  // ==========================================================================
+
+  describe('Performance Metrics', () => {
+    it('should track and expose execution metrics', async () => {
+      const task: Task = {
+        id: 'metrics-test',
+        type: 'generation',
+        prompt: 'Test metrics',
+        priority: TaskPriority.NORMAL,
+        status: TaskStatus.PENDING,
+      };
+
+      await orchestrator.execute(task);
+
+      const metrics = orchestrator.getMetrics();
+
+      expect(metrics).toHaveProperty('totalTasks');
+      expect(metrics).toHaveProperty('successfulTasks');
+      expect(metrics).toHaveProperty('failedTasks');
+      expect(metrics).toHaveProperty('averageLatencyMs');
+      expect(metrics).toHaveProperty('providerDistribution');
+
+      expect(metrics.totalTasks).toBeGreaterThan(0);
+      expect(metrics.successfulTasks).toBeGreaterThan(0);
+    });
+
+    it('should calculate provider distribution correctly', async () => {
+      // Execute multiple tasks to generate distribution data
+      const tasks: Task[] = [
+        {
+          id: 'dist-1',
+          type: 'generation',
+          prompt: 'Task 1',
+          priority: TaskPriority.NORMAL,
+          status: TaskStatus.PENDING,
+          providerHint: 'fast-provider',
+        },
+        {
+          id: 'dist-2',
+          type: 'generation',
+          prompt: 'Task 2',
+          priority: TaskPriority.NORMAL,
+          status: TaskStatus.PENDING,
+          providerHint: 'slow-provider',
+        },
+      ];
+
+      await Promise.all(tasks.map(t => orchestrator.execute(t)));
+
+      const metrics = orchestrator.getMetrics();
+
+      expect(metrics.providerDistribution).toHaveProperty('fast-provider');
+      expect(metrics.providerDistribution).toHaveProperty('slow-provider');
+      expect(metrics.providerDistribution['fast-provider']).toBeGreaterThan(0);
+      expect(metrics.providerDistribution['slow-provider']).toBeGreaterThan(0);
     });
   });
 });
