@@ -1,0 +1,60 @@
+# Harness 配置文件
+# 用于无人值守 Agent 开发
+
+project:
+  name: my-project
+  description: 多智能体opc电商
+  type: node-ts
+
+# LLM 配置 - Kimi For Coding (通过 Anthropic 兼容接口)
+# 专为编程优化的模型，支持长上下文（262K）
+llm:
+  provider: kimi  # ✅ 使用 Kimi 官方接口
+  model: kimi-for-coding  # ✅ Coding Plan 专用模型
+  apiKey: ${KIMI_API_KEY}  # 从 https://platform.moonshot.cn 获取（sk-kimi- 开头）
+  baseUrl: https://api.moonshot.cn/v1  # ✅ Kimi OpenAI 兼容端点
+  maxTokens: 32768
+  temperature: 0.2
+  timeout: 300000  # 5分钟 - LLM生成详细计划需要较长时间
+
+# 安全边界配置
+safety:
+  maxExecutionTime: 14400000  # 4小时
+  maxErrorRate: 0.3
+  maxComplexity: 10
+
+# 检查点配置
+checkpoint:
+  enabled: true
+  interval: 300000
+
+# PR 自动化配置
+pr:
+  autoCreate: true
+  autoReview: true
+  autoMerge: false
+
+# LangGraph 编排配置
+orchestration:
+  # 人工审核：在关键节点暂停等待人工确认
+  enableHumanReview: false
+  reviewTimeoutMs: 300000  # 5分钟
+  autoApproveAfterTimeout: false
+  
+  # 并行执行：同时执行多个独立任务
+  enableParallelExecution: false
+  maxParallelAgents: 3
+  
+  # A/B 测试：自动对比不同策略效果
+  enableABTesting: false
+
+# GitHub 配置
+# Token 请通过环境变量 GITHUB_TOKEN 设置
+github:
+  repo: JkRheezy/pin-ecommerce
+  token: ${GITHUB_TOKEN}
+
+# 通知配置
+notifications:
+  slack:
+    webhook: ${SLACK_WEBHOHOOK_URL}

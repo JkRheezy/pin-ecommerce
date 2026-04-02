@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        Json
+  description Json?
+  price       Decimal  @db.Decimal(10, 2)
+  currency    String   @default("USD")
+  images      String[]
+  inventory   Int      @default(999)
+  
+  aiMetadata  Json?
+  
+  category    String
+  tags        String[]
+  
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([category, isActive])
+  @@index([isActive, createdAt])
+}
+
+model Order {
+  id            String   @id @default(uuid())
+  orderNumber   String   @unique
+  
+  customerEmail String
+  customerName  String?
+  
+  shippingAddress Json
+  items         Json
+  
+  subtotal      Decimal @db.Decimal(10, 2)
+  shippingCost  Decimal @db.Decimal(10, 2)
+  tax           Decimal @db.Decimal(10, 2)
+  total         Decimal @db.Decimal(10, 2)
+  currency      String  @default("USD")
+  
+  status        String   @default("pending")
+  
+  stripePaymentIntentId String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([status, createdAt])
+}
+
+model AIJob {
+  id          String   @id @default(uuid())
+  type        String
+  status      String   @default("pending")
+  prompt      String   @db.Text
+  result      Json?
+  error       String?
+  
+  productId   String?
+  
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  
+  @@index([status, createdAt])
+  @@index([type, status])
+}
