@@ -3642,7 +3642,17 @@
 2026-04-02T07:46:59.333Z [32minfo[39m: 🏗️  检查架构约束...
 2026-04-02T07:46:59.335Z [32minfo[39m: 🌐 Starting browser validation...
 2026-04-02T07:46:59.345Z [33mwarn[39m: ⚠️ Dev server not detected, skipping browser validation
-.797Z [32minfo[39m: Sending OpenAI request (timeout: 300000ms)...
-2026-04-02T07:46:55.798Z [32minfo[39m: Waiting for OpenAI response...
-2026-04-02T07:46:55.999Z [33mwarn[39m: LLM call failed (attempt 2): 401 Invalid Authentication
-2026-04-02T07:46:56.000Z [32minfo[39m: Retry attempt 2/2...
+2026-04-02T07:47:03.846Z [32minfo[39m: 🔀 创建分支: harness/evolution-coverage-1775116005778-o6xzc
+2026-04-02T07:47:03.846Z [32minfo[39m: ✅ 任务执行完成: Add tests for page.tsx
+2026-04-02T07:47:03.846Z [32minfo[39m:    状态: failed
+2026-04-02T07:47:03.846Z [32minfo[39m:    耗时: 9653ms
+2026-04-02T07:47:03.847Z [33mwarn[39m: ⚠️ Task evolution-coverage-1775116005778-o6xzc failed (attempt 0/3): 
+2026-04-02T07:47:03.847Z [32minfo[39m: 📥 任务已加入队列: Fix: Add tests for page.tsx (75 个待处理)
+2026-04-02T07:47:03.847Z [32minfo[39m: 📥 Created fix task: fix-1775116023847
+2026-04-02T07:47:03.847Z [32minfo[39m: 📥 Fix task fix-1775116023847 created for failed task
+2026-04-02T07:47:03.847Z [33mwarn[39m: Session error rate high: 100.0% (75/75)
+2026-04-02T07:47:03.848Z [32minfo[39m: 📤 任务已取出: Add tests for layout.tsx (2 个待处理)
+2026-04-02T07:47:03.848Z [32minfo[39m: 📋 开始执行任务: Add tests for layout.tsx
+2026-04-02T07:47:03.848Z [32minfo[39m: 🎨 Starting design phase for: Add tests for layout.tsx
+2026-04-02T07:47:03.848Z [32minfo[39m: 🧠 Running brainstorming...
+202
