@@ -9,7 +9,8 @@ project:
 # LLM 配置 - Kimi For Coding (通过 Anthropic 兼容接口)
 # 专为编程优化的模型，支持长上下文（262K）
 llm:
-  provider: kimi  # ✅ 使用 Kimi 官方接口
+  # ⚠️ Kimi Coding Plan 使用 Anthropic 兼容接口
+  provider: anthropic  # ✅ 使用 anthropic 兼容接口调用 Kimi
   model: kimi-for-coding  # ✅ Coding Plan 专用模型
   apiKey: ${KIMI_API_KEY}  # 从 https://platform.moonshot.cn 获取（sk-kimi- 开头）
   baseUrl: https://api.kimi.com/coding  # ✅ Kimi Anthropic 兼容端点
