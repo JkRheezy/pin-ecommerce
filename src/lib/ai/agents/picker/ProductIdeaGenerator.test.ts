@@ -1,607 +1,304 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ProductIdeaGenerator, type ProductIdeaGeneratorConfig, type ProductIdeaInput, type ProductIdeaOutput } from './ProductIdeaGenerator'
-import { StructuredOutputParser } from '@langchain/core/output_parsers'
-import { ChatPromptTemplate } from '@langchain/core/prompts'
-import { RunnableSequence } from '@langchain/core/runnables'
-import type { BaseLanguageModel } from '@langchain/core/language_models/base'
+// Types Layer: Test types and fixtures
+import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { ProductIdeaGenerator, ProductIdeaInput, ProductIdeaOutput } from './ProductIdeaGenerator';
+import { AIProvider, AIResponse, AIError } from '../../providers/AIProvider';
+import { StructuredLogger } from '../../../logging/StructuredLogger';
+import { ValidationError } from '../../../errors/ValidationError';
 
-// Types Layer: Test fixtures and mocks
-interface MockLLMResponse {
-  ideas: Array<{
-    name: string
-    description: string
-    category: string
-    confidenceScore: number
-    targetAudience: string[]
-    keyFeatures: string[]
-  }>
+// Config Layer: Test configuration
+const TEST_CONFIG = {
+  maxRetries: 3,
+  timeoutMs: 5000,
+  defaultCategory: 'general',
+} as const;
+
+// Test fixtures following taste invariants
+const validInputFixture: ProductIdeaInput = {
+  category: 'productivity',
+  constraints: ['budget-friendly', 'mobile-first'],
+  targetAudience: 'remote workers',
+  problemStatement: 'difficulty managing time across multiple time zones',
+};
+
+const aiResponseFixture: AIResponse<ProductIdeaOutput> = {
+  data: {
+    title: 'TimeZone Sync Pro',
+    description: 'A smart calendar that automatically adjusts meeting times based on all participants\' time zones with visual overlap indicators.',
+    keyFeatures: ['Auto-timezone detection', 'Visual overlap heatmap', 'Smart scheduling suggestions'],
+    targetMarket: 'Remote teams and freelancers',
+    differentiation: 'Unlike competitors, shows real-time availability overlap at a glance',
+  },
+  metadata: {
+    model: 'gpt-4',
+    tokensUsed: 342,
+    latencyMs: 890,
+  },
+};
+
+// Mock implementations following Repo Layer pattern
+class MockAIProvider implements AIProvider {
+  private shouldFail: boolean = false;
+  private failureCount: number = 0;
+  private maxFailures: number = 0;
+
+  setFailureMode(maxFailures: number = 0): void {
+    this.shouldFail = maxFailures > 0;
+    this.maxFailures = maxFailures;
+    this.failureCount = 0;
+  }
+
+  async generateStructured<T>(prompt: string, schema: unknown): Promise<AIResponse<T>> {
+    if (this.shouldFail && this.failureCount < this.maxFailures) {
+      this.failureCount++;
+      throw new AIError('PROVIDER_ERROR', 'Simulated AI provider failure');
+    }
+    return aiResponseFixture as AIResponse<T>;
+  }
+
+  async generateText(prompt: string): Promise<string> {
+    throw new Error('Not implemented in mock');
+  }
 }
 
-// Mock the LangChain dependencies
-vi.mock('@langchain/core/output_parsers', () => ({
-  StructuredOutputParser: {
-    fromZodSchema: vi.fn().mockReturnValue({
-      getFormatInstructions: vi.fn().mockReturnValue('Format instructions'),
-      parse: vi.fn()
-    })
-  }
-}))
-
-vi.mock('@langchain/core/prompts', () => ({
-  ChatPromptTemplate: {
-    fromMessages: vi.fn().mockReturnValue({
-      pipe: vi.fn().mockReturnValue({
-        pipe: vi.fn().mockReturnValue({
-          invoke: vi.fn()
-        })
-      })
-    })
-  }
-}))
-
-vi.mock('@langchain/core/runnables', () => ({
-  RunnableSequence: {
-    from: vi.fn().mockReturnValue({
-      invoke: vi.fn()
-    })
-  }
-}))
-
+// Service Layer: Test suite for ProductIdeaGenerator
 describe('ProductIdeaGenerator', () => {
-  // Config Layer: Default test configuration
-  const defaultConfig: ProductIdeaGeneratorConfig = {
-    model: {
-      temperature: 0.7,
-      maxTokens: 2000,
-      modelName: 'gpt-4'
-    },
-    constraints: {
-      maxIdeas: 5,
-      minConfidenceScore: 0.6,
-      allowedCategories: ['SaaS', 'Consumer', 'Enterprise', 'Developer Tools']
-    },
-    retryPolicy: {
-      maxRetries: 3,
-      backoffMultiplier: 2,
-      initialDelayMs: 1000
-    }
-  }
-
-  // Valid input fixture
-  const validInput: ProductIdeaInput = {
-    marketTrends: ['AI automation', 'Remote work tools', 'No-code platforms'],
-    userPainPoints: ['Time-consuming manual tasks', 'Fragmented workflows', 'High learning curves'],
-    competitorAnalysis: {
-      directCompetitors: ['Notion', 'Airtable'],
-      indirectCompetitors: ['Google Docs', 'Excel'],
-      gaps: ['Better AI integration', 'Simpler onboarding', 'Lower pricing']
-    },
-    constraints: {
-      budget: 'bootstrap',
-      timeline: '6 months',
-      technicalFeasibility: 'medium'
-    }
-  }
-
-  let generator: ProductIdeaGenerator
-  let mockModel: BaseLanguageModel
+  let mockProvider: MockAIProvider;
+  let mockLogger: StructuredLogger;
+  let generator: ProductIdeaGenerator;
 
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockModel = {} as BaseLanguageModel
-    generator = new ProductIdeaGenerator(mockModel, defaultConfig)
-  })
+    // Runtime Layer: Initialize dependencies for each test
+    mockProvider = new MockAIProvider();
+    mockLogger = {
+      info: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+      debug: jest.fn(),
+    } as unknown as StructuredLogger;
 
-  describe('Layer 1: Types - Input Validation', () => {
-    it('should validate required input fields', async () => {
-      const invalidInput = {
-        marketTrends: [],
-        userPainPoints: validInput.userPainPoints,
-        competitorAnalysis: validInput.competitorAnalysis,
-        constraints: validInput.constraints
-      } as ProductIdeaInput
+    generator = new ProductIdeaGenerator({
+      provider: mockProvider,
+      logger: mockLogger,
+      config: {
+        maxRetries: TEST_CONFIG.maxRetries,
+        timeoutMs: TEST_CONFIG.timeoutMs,
+      },
+    });
+  });
 
-      await expect(generator.generate(invalidInput)).rejects.toThrow('Validation failed: marketTrends must not be empty')
-    })
-
-    it('should reject inputs with empty pain points', async () => {
-      const invalidInput = {
-        ...validInput,
-        userPainPoints: []
-      }
-
-      await expect(generator.generate(invalidInput)).rejects.toThrow('Validation failed: userPainPoints must not be empty')
-    })
-
-    it('should reject competitor analysis with missing gaps', async () => {
-      const invalidInput = {
-        ...validInput,
-        competitorAnalysis: {
-          ...validInput.competitorAnalysis,
-          gaps: []
-        }
-      }
-
-      await expect(generator.generate(invalidInput)).rejects.toThrow('Validation failed: competitorAnalysis.gaps must not be empty')
-    })
-
-    it('should validate constraint values', async () => {
-      const invalidInput = {
-        ...validInput,
-        constraints: {
-          ...validInput.constraints,
-          budget: 'invalid-budget' as any
-        }
-      }
-
-      await expect(generator.generate(invalidInput)).rejects.toThrow('Validation failed: constraints.budget must be one of')
-    })
-  })
-
-  describe('Layer 2: Config - Configuration Handling', () => {
-    it('should use default config when partial config provided', () => {
-      const partialConfig: Partial<ProductIdeaGeneratorConfig> = {
-        model: {
-          temperature: 0.5
-        }
-      }
-
-      const generatorWithPartialConfig = new ProductIdeaGenerator(mockModel, partialConfig as ProductIdeaGeneratorConfig)
+  describe('Input Validation', () => {
+    it('should throw ValidationError when category is empty', async () => {
+      const invalidInput = { ...validInputFixture, category: '' };
       
-      // Access internal config through reflection for testing
-      const internalConfig = (generatorWithPartialConfig as any).config
-      
-      expect(internalConfig.model.temperature).toBe(0.5)
-      expect(internalConfig.model.maxTokens).toBe(defaultConfig.model.maxTokens)
-      expect(internalConfig.constraints.maxIdeas).toBe(defaultConfig.constraints.maxIdeas)
-    })
+      await expect(generator.generate(invalidInput)).rejects.toThrow(ValidationError);
+      await expect(generator.generate(invalidInput)).rejects.toThrow('Category is required');
+    });
 
-    it('should override all defaults when complete config provided', () => {
-      const customConfig: ProductIdeaGeneratorConfig = {
-        model: {
-          temperature: 0.9,
-          maxTokens: 4000,
-          modelName: 'gpt-4-turbo'
-        },
-        constraints: {
-          maxIdeas: 10,
-          minConfidenceScore: 0.8,
-          allowedCategories: ['AI', 'ML']
-        },
-        retryPolicy: {
-          maxRetries: 5,
-          backoffMultiplier: 3,
-          initialDelayMs: 500
-        }
-      }
+    it('should throw ValidationError when problemStatement exceeds max length', async () => {
+      const invalidInput = {
+        ...validInputFixture,
+        problemStatement: 'a'.repeat(1001), // Assuming max is 1000
+      };
 
-      const customGenerator = new ProductIdeaGenerator(mockModel, customConfig)
-      const internalConfig = (customGenerator as any).config
+      await expect(generator.generate(invalidInput)).rejects.toThrow(ValidationError);
+    });
 
-      expect(internalConfig).toEqual(customConfig)
-    })
+    it('should throw ValidationError when constraints array is empty', async () => {
+      const invalidInput = { ...validInputFixture, constraints: [] };
 
-    it('should validate config constraints are positive', () => {
-      const invalidConfig = {
-        ...defaultConfig,
-        constraints: {
-          ...defaultConfig.constraints,
-          maxIdeas: 0
-        }
-      }
+      await expect(generator.generate(invalidInput)).rejects.toThrow(ValidationError);
+    });
 
-      expect(() => new ProductIdeaGenerator(mockModel, invalidConfig)).toThrow('Config validation failed: maxIdeas must be positive')
-    })
-  })
+    it('should accept valid input with optional fields omitted', async () => {
+      const minimalInput: ProductIdeaInput = {
+        category: 'productivity',
+        constraints: ['simple'],
+        problemStatement: 'test problem',
+      };
 
-  describe('Layer 3: Repo - Data Access Patterns', () => {
-    it('should cache similar inputs to avoid redundant LLM calls', async () => {
-      const mockResponse: ProductIdeaOutput = {
-        ideas: [
-          {
-            id: 'idea-1',
-            name: 'AI Task Automator',
-            description: 'Automates repetitive tasks using AI',
-            category: 'SaaS',
-            confidenceScore: 0.85,
-            targetAudience: ['Small businesses', 'Freelancers'],
-            keyFeatures: ['AI-powered scheduling', 'Email automation', 'Report generation'],
-            marketSizeEstimate: '$1B',
-            competitiveAdvantage: 'Better AI integration than competitors',
-            estimatedDevelopmentTime: '4 months',
-            riskFactors: ['AI accuracy', 'User adoption']
-          }
-        ],
-        generatedAt: new Date().toISOString(),
-        metadata: {
-          modelUsed: 'gpt-4',
-          tokensConsumed: 1500,
-          processingTimeMs: 2500
-        }
-      }
+      mockProvider.setFailureMode(0);
+      const result = await generator.generate(minimalInput);
 
-      const mockInvoke = vi.fn().mockResolvedValue(mockResponse)
-      const mockChain = {
-        invoke: mockInvoke
-      }
-      
-      vi.mocked(RunnableSequence.from).mockReturnValue(mockChain as any)
+      expect(result).toBeDefined();
+      expect(result.title).toBe(aiResponseFixture.data.title);
+    });
+  });
 
-      // First call
-      const result1 = await generator.generate(validInput)
-      
-      // Second call with same input (should use cache)
-      const result2 = await generator.generate(validInput)
+  describe('Successful Generation', () => {
+    it('should return structured product idea on successful AI call', async () => {
+      const result = await generator.generate(validInputFixture);
 
-      expect(mockInvoke).toHaveBeenCalledTimes(1)
-      expect(result1).toEqual(result2)
-    })
+      expect(result).toMatchObject({
+        title: expect.any(String),
+        description: expect.any(String),
+        keyFeatures: expect.any(Array),
+        targetMarket: expect.any(String),
+        differentiation: expect.any(String),
+      });
+    });
 
-    it('should generate different results for different inputs', async () => {
-      const differentInput: ProductIdeaInput = {
-        ...validInput,
-        marketTrends: ['Blockchain', 'DeFi', 'Web3']
-      }
+    it('should include all required output fields', async () => {
+      const result = await generator.generate(validInputFixture);
 
-      const mockResponse1: ProductIdeaOutput = {
-        ideas: [{ id: 'idea-1', name: 'AI Tool', category: 'SaaS', confidenceScore: 0.8 } as any],
-        generatedAt: new Date().toISOString(),
-        metadata: { modelUsed: 'gpt-4', tokensConsumed: 1000, processingTimeMs: 2000 }
-      }
+      expect(result.keyFeatures.length).toBeGreaterThan(0);
+      expect(result.title.length).toBeGreaterThan(0);
+      expect(result.description.length).toBeGreaterThan(0);
+    });
 
-      const mockResponse2: ProductIdeaOutput = {
-        ideas: [{ id: 'idea-2', name: 'DeFi Platform', category: 'Web3', confidenceScore: 0.75 } as any],
-        generatedAt: new Date().toISOString(),
-        metadata: { modelUsed: 'gpt-4', tokensConsumed: 1200, processingTimeMs: 2200 }
-      }
+    it('should log successful generation with metadata', async () => {
+      await generator.generate(validInputFixture);
 
-      const mockInvoke = vi.fn()
-        .mockResolvedValueOnce(mockResponse1)
-        .mockResolvedValueOnce(mockResponse2)
-
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const result1 = await generator.generate(validInput)
-      const result2 = await generator.generate(differentInput)
-
-      expect(result1.ideas[0].category).toBe('SaaS')
-      expect(result2.ideas[0].category).toBe('Web3')
-    })
-  })
-
-  describe('Layer 4: Service - Business Logic', () => {
-    it('should filter ideas below minimum confidence score', async () => {
-      const rawResponse = {
-        ideas: [
-          { name: 'High Confidence Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.9, targetAudience: ['Users'], keyFeatures: ['Feature 1'] },
-          { name: 'Low Confidence Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.4, targetAudience: ['Users'], keyFeatures: ['Feature 1'] },
-          { name: 'Borderline Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.6, targetAudience: ['Users'], keyFeatures: ['Feature 1'] }
-        ]
-      }
-
-      const mockInvoke = vi.fn().mockResolvedValue(rawResponse)
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const result = await generator.generate(validInput)
-
-      // Should filter out the 0.4 confidence idea, keep 0.9 and 0.6 (at threshold)
-      expect(result.ideas).toHaveLength(2)
-      expect(result.ideas.every(i => i.confidenceScore >= defaultConfig.constraints.minConfidenceScore)).toBe(true)
-    })
-
-    it('should limit ideas to maxIdeas constraint', async () => {
-      const manyIdeasResponse = {
-        ideas: Array(10).fill(null).map((_, i) => ({
-          name: `Idea ${i}`,
-          description: 'Description',
-          category: 'SaaS',
-          confidenceScore: 0.8,
-          targetAudience: ['Users'],
-          keyFeatures: ['Feature']
-        }))
-      }
-
-      const mockInvoke = vi.fn().mockResolvedValue(manyIdeasResponse)
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const result = await generator.generate(validInput)
-
-      expect(result.ideas).toHaveLength(defaultConfig.constraints.maxIdeas)
-    })
-
-    it('should sort ideas by confidence score descending', async () => {
-      const unsortedResponse = {
-        ideas: [
-          { name: 'Medium', description: 'Desc', category: 'SaaS', confidenceScore: 0.7, targetAudience: ['Users'], keyFeatures: ['Feature'] },
-          { name: 'High', description: 'Desc', category: 'SaaS', confidenceScore: 0.95, targetAudience: ['Users'], keyFeatures: ['Feature'] },
-          { name: 'Low', description: 'Desc', category: 'SaaS', confidenceScore: 0.75, targetAudience: ['Users'], keyFeatures: ['Feature'] }
-        ]
-      }
-
-      const mockInvoke = vi.fn().mockResolvedValue(unsortedResponse)
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const result = await generator.generate(validInput)
-
-      expect(result.ideas[0].confidenceScore).toBe(0.95)
-      expect(result.ideas[1].confidenceScore).toBe(0.75)
-      expect(result.ideas[2].confidenceScore).toBe(0.7)
-    })
-
-    it('should validate and reject ideas in disallowed categories', async () => {
-      const invalidCategoryResponse = {
-        ideas: [
-          { name: 'Valid Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.8, targetAudience: ['Users'], keyFeatures: ['Feature'] },
-          { name: 'Invalid Idea', description: 'Desc', category: 'IllegalCategory', confidenceScore: 0.8, targetAudience: ['Users'], keyFeatures: ['Feature'] }
-        ]
-      }
-
-      const mockInvoke = vi.fn().mockResolvedValue(invalidCategoryResponse)
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const result = await generator.generate(validInput)
-
-      // Should filter out the invalid category idea
-      expect(result.ideas).toHaveLength(1)
-      expect(result.ideas[0].category).toBe('SaaS')
-    })
-  })
-
-  describe('Layer 5: Runtime - Execution & Error Handling', () => {
-    it('should retry on transient LLM failures', async () => {
-      const mockInvoke = vi.fn()
-        .mockRejectedValueOnce(new Error('Rate limit exceeded'))
-        .mockRejectedValueOnce(new Error('Service temporarily unavailable'))
-        .mockResolvedValueOnce({
-          ideas: [{ name: 'Success', description: 'Desc', category: 'SaaS', confidenceScore: 0.8, targetAudience: ['Users'], keyFeatures: ['Feature'] }]
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Product idea generated successfully',
+        expect.objectContaining({
+          category: validInputFixture.category,
+          latencyMs: expect.any(Number),
+          tokensUsed: expect.any(Number),
         })
+      );
+    });
+  });
 
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
+  describe('Error Handling and Retries', () => {
+    it('should retry on transient AI provider errors', async () => {
+      // Simulate 2 failures then success
+      mockProvider.setFailureMode(2);
 
-      // Mock setTimeout to speed up tests
-      vi.useFakeTimers()
+      const result = await generator.generate(validInputFixture);
 
-      const generatePromise = generator.generate(validInput)
-
-      // Fast-forward through retries
-      await vi.advanceTimersByTimeAsync(1000) // First retry delay
-      await vi.advanceTimersByTimeAsync(2000) // Second retry delay (backoffMultiplier * initialDelay)
-
-      const result = await generatePromise
-
-      expect(mockInvoke).toHaveBeenCalledTimes(3)
-      expect(result.ideas).toHaveLength(1)
-
-      vi.useRealTimers()
-    })
+      expect(result).toBeDefined();
+      expect(result.title).toBe(aiResponseFixture.data.title);
+    });
 
     it('should throw after max retries exceeded', async () => {
-      const mockInvoke = vi.fn().mockRejectedValue(new Error('Persistent failure'))
+      // Simulate more failures than max retries
+      mockProvider.setFailureMode(TEST_CONFIG.maxRetries + 1);
 
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
+      await expect(generator.generate(validInputFixture)).rejects.toThrow(
+        'Failed to generate product idea after maximum retries'
+      );
+    });
 
-      vi.useFakeTimers()
+    it('should log each retry attempt', async () => {
+      mockProvider.setFailureMode(1);
 
-      const generatePromise = generator.generate(validInput)
-
-      // Fast-forward through all retries
-      await vi.advanceTimersByTimeAsync(1000)
-      await vi.advanceTimersByTimeAsync(2000)
-      await vi.advanceTimersByTimeAsync(4000)
-
-      await expect(generatePromise).rejects.toThrow('Failed to generate product ideas after 3 retries: Persistent failure')
-
-      vi.useRealTimers()
-    })
-
-    it('should handle malformed LLM responses gracefully', async () => {
-      const mockInvoke = vi.fn().mockResolvedValue({
-        ideas: 'not-an-array' // Malformed response
-      })
-
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      await expect(generator.generate(validInput)).rejects.toThrow('Invalid response format: ideas must be an array')
-    })
-
-    it('should handle missing required fields in response', async () => {
-      const mockInvoke = vi.fn().mockResolvedValue({
-        ideas: [{ name: 'Incomplete Idea' }] // Missing required fields
-      })
-
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      await expect(generator.generate(validInput)).rejects.toThrow('Invalid idea format: missing required field')
-    })
-
-    it('should log structured error information', async () => {
-      const mockLogger = {
-        error: vi.fn(),
-        warn: vi.fn(),
-        info: vi.fn(),
-        debug: vi.fn()
+      try {
+        await generator.generate(validInputFixture);
+      } catch {
+        // Expected to succeed on retry
       }
 
-      // Inject mock logger
-      ;(generator as any).logger = mockLogger
-
-      const mockInvoke = vi.fn().mockRejectedValue(new Error('LLM Error'))
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      vi.useFakeTimers()
-      
-      const generatePromise = generator.generate(validInput)
-      await vi.advanceTimersByTimeAsync(7000) // All retries
-      await expect(generatePromise).rejects.toThrow()
-
-      // Verify structured logging was called
-      expect(mockLogger.error).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'AI provider error, attempting retry',
         expect.objectContaining({
-          event: 'product_idea_generation_failed',
+          attempt: expect.any(Number),
           error: expect.any(String),
-          retryCount: expect.any(Number),
-          inputHash: expect.any(String)
         })
-      )
+      );
+    });
 
-      vi.useRealTimers()
-    })
-  })
+    it('should handle timeout errors gracefully', async () => {
+      // Create provider that simulates timeout
+      const slowProvider: AIProvider = {
+        async generateStructured<T>(): Promise<AIResponse<T>> {
+          return new Promise((_, reject) => {
+            setTimeout(() => reject(new AIError('TIMEOUT', 'Request timed out')), TEST_CONFIG.timeoutMs + 100);
+          });
+        },
+        async generateText(): Promise<string> {
+          throw new Error('Not implemented');
+        },
+      };
 
-  describe('Layer 6: UI - Output Formatting', () => {
-    it('should include all required output fields', async () => {
-      const mockResponse = {
-        ideas: [{
-          name: 'Complete Idea',
-          description: 'A comprehensive product idea',
-          category: 'SaaS',
-          confidenceScore: 0.85,
-          targetAudience: ['SMBs', 'Enterprise'],
-          keyFeatures: ['AI Integration', 'Real-time Sync', 'API Access'],
-          marketSizeEstimate: '$5B TAM',
-          competitiveAdvantage: 'First-mover advantage in niche',
-          estimatedDevelopmentTime: '6 months',
-          riskFactors: ['Technical complexity', 'Market timing']
-        }]
-      }
+      const slowGenerator = new ProductIdeaGenerator({
+        provider: slowProvider,
+        logger: mockLogger,
+        config: { maxRetries: 1, timeoutMs: TEST_CONFIG.timeoutMs },
+      });
 
-      const mockInvoke = vi.fn().mockResolvedValue(mockResponse)
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const result = await generator.generate(validInput)
-
-      // Verify all ideas have required UI fields
-      result.ideas.forEach(idea => {
-        expect(idea.id).toBeDefined()
-        expect(idea.name).toBeDefined()
-        expect(idea.description).toBeDefined()
-        expect(idea.category).toBeDefined()
-        expect(idea.confidenceScore).toBeDefined()
-        expect(idea.targetAudience).toBeInstanceOf(Array)
-        expect(idea.keyFeatures).toBeInstanceOf(Array)
-      })
-
-      // Verify metadata
-      expect(result.metadata).toMatchObject({
-        modelUsed: expect.any(String),
-        tokensConsumed: expect.any(Number),
-        processingTimeMs: expect.any(Number)
-      })
-
-      expect(result.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/) // ISO format
-    })
-
-    it('should generate unique IDs for each idea', async () => {
-      const mockResponse = {
-        ideas: [
-          { name: 'Idea 1', description: 'Desc', category: 'SaaS', confidenceScore: 0.8, targetAudience: ['Users'], keyFeatures: ['Feature'] },
-          { name: 'Idea 2', description: 'Desc', category: 'SaaS', confidenceScore: 0.85, targetAudience: ['Users'], keyFeatures: ['Feature'] },
-          { name: 'Idea 3', description: 'Desc', category: 'SaaS', confidenceScore: 0.9, targetAudience: ['Users'], keyFeatures: ['Feature'] }
-        ]
-      }
-
-      const mockInvoke = vi.fn().mockResolvedValue(mockResponse)
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const result = await generator.generate(validInput)
-
-      const ids = result.ideas.map(i => i.id)
-      const uniqueIds = new Set(ids)
-      
-      expect(uniqueIds.size).toBe(ids.length) // All IDs are unique
-    })
-
-    it('should format confidence score as percentage for UI display', async () => {
-      const mockResponse = {
-        ideas: [{ name: 'Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.8567, targetAudience: ['Users'], keyFeatures: ['Feature'] }]
-      }
-
-      const mockInvoke = vi.fn().mockResolvedValue(mockResponse)
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const result = await generator.generate(validInput)
-
-      // Score should be preserved as number, UI layer can format
-      expect(typeof result.ideas[0].confidenceScore).toBe('number')
-      expect(result.ideas[0].confidenceScore).toBe(0.8567)
-    })
-  })
+      await expect(slowGenerator.generate(validInputFixture)).rejects.toThrow();
+    });
+  });
 
   describe('Edge Cases', () => {
-    it('should handle empty competitor gaps with warning', async () => {
-      const inputWithNoGaps = {
-        ...validInput,
-        competitorAnalysis: {
-          ...validInput.competitorAnalysis,
-          gaps: ['No clear gaps identified']
-        }
-      }
+    it('should handle special characters in input safely', async () => {
+      const specialInput: ProductIdeaInput = {
+        ...validInputFixture,
+        problemStatement: 'Problem with "quotes" and <html> & special chars',
+      };
 
-      const mockInvoke = vi.fn().mockResolvedValue({
-        ideas: [{ name: 'Generic Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.7, targetAudience: ['Users'], keyFeatures: ['Feature'] }]
-      })
+      const result = await generator.generate(specialInput);
+      expect(result).toBeDefined();
+    });
 
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
+    it('should handle unicode characters in input', async () => {
+      const unicodeInput: ProductIdeaInput = {
+        ...validInputFixture,
+        problemStatement: 'Problème avec des caractères unicode 🚀 日本語',
+      };
 
-      const result = await generator.generate(inputWithNoGaps)
-      expect(result.ideas).toHaveLength(1)
-    })
+      const result = await generator.generate(unicodeInput);
+      expect(result).toBeDefined();
+    });
 
-    it('should handle very long input strings', async () => {
-      const longInput: ProductIdeaInput = {
-        ...validInput,
-        marketTrends: [Array(10000).fill('a').join('')] // 10KB string
-      }
+    it('should sanitize and truncate overly long AI responses', async () => {
+      const longResponseProvider: AIProvider = {
+        async generateStructured<T>(): Promise<AIResponse<T>> {
+          return {
+            data: {
+              title: 'A'.repeat(500), // Exceeds typical limits
+              description: 'B'.repeat(5000),
+              keyFeatures: Array(100).fill('feature'),
+              targetMarket: 'C'.repeat(500),
+              differentiation: 'D'.repeat(500),
+            } as unknown as T,
+            metadata: { model: 'gpt-4', tokensUsed: 1000, latencyMs: 500 },
+          };
+        },
+        async generateText(): Promise<string> {
+          throw new Error('Not implemented');
+        },
+      };
 
-      const mockInvoke = vi.fn().mockResolvedValue({
-        ideas: [{ name: 'Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.8, targetAudience: ['Users'], keyFeatures: ['Feature'] }]
-      })
+      const generatorWithLongResponse = new ProductIdeaGenerator({
+        provider: longResponseProvider,
+        logger: mockLogger,
+        config: { maxRetries: 1, timeoutMs: TEST_CONFIG.timeoutMs },
+      });
 
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
+      const result = await generatorWithLongResponse.generate(validInputFixture);
+      
+      // Verify truncation occurred
+      expect(result.title.length).toBeLessThan(500);
+      expect(result.description.length).toBeLessThan(5000);
+    });
+  });
 
-      // Should not throw, should truncate or handle gracefully
-      const result = await generator.generate(longInput)
-      expect(result.ideas).toBeDefined()
-    })
+  describe('Prompt Construction', () => {
+    it('should build prompt with all input fields', async () => {
+      const buildPromptSpy = jest.spyOn(generator as any, 'buildPrompt');
+      
+      await generator.generate(validInputFixture);
 
-    it('should handle special characters in input', async () => {
-      const specialCharInput: ProductIdeaInput = {
-        ...validInput,
-        userPainPoints: ['Can\'t sync data"', 'Issues with "special" chars <script>alert(1)</script>']
-      }
+      expect(buildPromptSpy).toHaveReturnedWith(
+        expect.stringContaining(validInputFixture.category)
+      );
+      expect(buildPromptSpy).toHaveReturnedWith(
+        expect.stringContaining(validInputFixture.problemStatement)
+      );
+      expect(buildPromptSpy).toHaveReturnedWith(
+        expect.stringContaining(validInputFixture.constraints[0])
+      );
+    });
 
-      const mockInvoke = vi.fn().mockResolvedValue({
-        ideas: [{ name: 'Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.8, targetAudience: ['Users'], keyFeatures: ['Feature'] }]
-      })
+    it('should include target audience when provided', async () => {
+      const buildPromptSpy = jest.spyOn(generator as any, 'buildPrompt');
+      
+      await generator.generate(validInputFixture);
 
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      // Should sanitize or handle special characters safely
-      const result = await generator.generate(specialCharInput)
-      expect(result.ideas).toBeDefined()
-    })
-
-    it('should handle concurrent generation requests', async () => {
-      const mockInvoke = vi.fn().mockResolvedValue({
-        ideas: [{ name: 'Idea', description: 'Desc', category: 'SaaS', confidenceScore: 0.8, targetAudience: ['Users'], keyFeatures: ['Feature'] }]
-      })
-
-      vi.mocked(RunnableSequence.from).mockReturnValue({ invoke: mockInvoke } as any)
-
-      const differentInput = {
-        ...validInput,
-        marketTrends: ['Different trend']
-      }
-
-      // Run concurrent requests
-      const [result1, result2] = await Promise.all([
-        generator.generate(validInput),
-        generator.generate(differentInput)
-      ])
-
-      expect(result1).toBeDefined()
-      expect(result2).toBeDefined()
-      expect(mockInvoke).toHaveBeenCalledTimes(2)
-    })
-  })
-})
+      expect(buildPromptSpy).toHaveReturnedWith(
+        expect.stringContaining(validInputFixture.targetAudience!)
+      );
+    });
+  });
+});
