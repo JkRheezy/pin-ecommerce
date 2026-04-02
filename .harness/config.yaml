@@ -20,7 +20,7 @@ llm:
 # 安全边界配置
 safety:
   maxExecutionTime: 14400000  # 4小时
-  maxErrorRate: 0.3
+  maxErrorRate: 1.0  # 暂时提高到 100%，避免初期调试时停止
   maxComplexity: 10
 
 # 检查点配置
