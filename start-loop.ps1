@@ -1,22 +1,26 @@
-﻿# Harness Loop 启动脚本
-# 自动设置 UTF-8 编码，解决中文乱码问题
+# Harness Loop 启动脚本
+# 自动设置必要的环境变量并启动 Loop
 
-# ===== 编码设置（关键）=====
+# 设置控制台编码
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-chcp 65001 | Out-Null
 
-# ===== 环境变量设置 =====
-$env:ANTHROPIC_API_KEY = "sk-kimi-2mZaQf6fRT3pvQegC3ypQ9uy8gRAgbY2BCnMpwjkMrr6yakzRposNZ15QJuMPAlI"
+# 从用户环境变量读取（之前已设置）
+$env:ANTHROPIC_API_KEY = [Environment]::GetEnvironmentVariable("ANTHROPIC_API_KEY", "User")
+$env:GITHUB_TOKEN = [Environment]::GetEnvironmentVariable("GITHUB_TOKEN", "User")
 $env:ENABLE_TOOL_SEARCH = "false"
-$env:GITHUB_TOKEN = $env:GITHUB_TOKEN
 
-# ===== 启动 Loop =====
-Write-Host "启动 Harness Loop..."
-Write-Host "工作目录: $PWD"
-
-# 清理旧的日志文件
-Remove-Item "logs\harness.log" -Force -ErrorAction SilentlyContinue
+# 验证环境变量
+Write-Host "✅ 环境变量已设置:" -ForegroundColor Green
+Write-Host "   ANTHROPIC_API_KEY: $($env:ANTHROPIC_API_KEY.Substring(0, 15))..." -ForegroundColor Gray
+Write-Host "   GITHUB_TOKEN: $($env:GITHUB_TOKEN.Substring(0, 20))..." -ForegroundColor Gray
+Write-Host "   ENABLE_TOOL_SEARCH: $env:ENABLE_TOOL_SEARCH" -ForegroundColor Gray
+Write-Host ""
 
 # 启动 Loop
-node D:\work\study\Kimi_Agent_OpenAI_Harness\harness-cli\dist\cli.js loop --duration 4
+$duration = $args[0]
+if (-not $duration) { $duration = "0.5" }
+
+Write-Host "🚀 启动 Harness Loop (时长: $duration 小时)..." -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+
+node D:\work\study\Kimi_Agent_OpenAI_Harness\harness-cli\dist\cli.js loop --duration $duration
