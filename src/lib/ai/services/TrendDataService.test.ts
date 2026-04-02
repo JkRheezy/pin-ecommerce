@@ -1,606 +1,442 @@
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TrendDataService } from './TrendDataService';
-import { TrendDataRepository } from '../repositories/TrendDataRepository';
+import { TrendAnalysisConfig, TrendDataPoint, TrendAnalysisResult } from '../types/TrendAnalysisTypes';
 import { Logger } from '../../logging/Logger';
-import type {
-  TrendData,
-  TrendDataQuery,
-  TrendDataConfig,
-  TimeRange,
-  TrendMetric,
-  TrendAnalysisResult,
-} from '../types/TrendDataTypes';
+import { MetricRepository } from '../repos/MetricRepository';
+import { TimeSeriesValidator } from '../validators/TimeSeriesValidator';
+import { TrendCalculator } from '../calculators/TrendCalculator';
+import { TrendAnalysisError } from '../errors/TrendAnalysisError';
+import { ErrorCode } from '../../errors/ErrorCode';
 
 // Mock dependencies
-jest.mock('../repositories/TrendDataRepository');
-jest.mock('../../logging/Logger');
+vi.mock('../../logging/Logger');
+vi.mock('../repos/MetricRepository');
+vi.mock('../validators/TimeSeriesValidator');
+vi.mock('../calculators/TrendCalculator');
 
 describe('TrendDataService', () => {
   let service: TrendDataService;
-  let mockRepository: jest.Mocked<TrendDataRepository>;
-  let mockLogger: jest.Mocked<Logger>;
+  let mockLogger: Logger;
+  let mockMetricRepo: MetricRepository;
+  let mockValidator: TimeSeriesValidator;
+  let mockCalculator: TrendCalculator;
 
-  // Test fixtures
-  const validTimeRange: TimeRange = {
-    startTime: new Date('2024-01-01T00:00:00Z'),
-    endTime: new Date('2024-01-31T23:59:59Z'),
+  const mockConfig: TrendAnalysisConfig = {
+    metricId: 'test-metric-123',
+    timeRange: {
+      start: new Date('2024-01-01'),
+      end: new Date('2024-01-31'),
+    },
+    granularity: 'daily',
+    smoothingFactor: 0.3,
   };
 
-  const validConfig: TrendDataConfig = {
-    metricTypes: ['cpu', 'memory', 'disk'],
-    aggregationInterval: '1h',
-    includeForecast: true,
-    confidenceLevel: 0.95,
-  };
-
-  const mockTrendData: TrendData[] = [
-    {
-      timestamp: new Date('2024-01-01T00:00:00Z'),
-      metric: 'cpu',
-      value: 45.5,
-      metadata: { host: 'server-1' },
-    },
-    {
-      timestamp: new Date('2024-01-01T01:00:00Z'),
-      metric: 'cpu',
-      value: 52.3,
-      metadata: { host: 'server-1' },
-    },
+  const mockDataPoints: TrendDataPoint[] = [
+    { timestamp: new Date('2024-01-01'), value: 100, metadata: {} },
+    { timestamp: new Date('2024-01-02'), value: 105, metadata: {} },
+    { timestamp: new Date('2024-01-03'), value: 103, metadata: {} },
+    { timestamp: new Date('2024-01-04'), value: 110, metadata: {} },
+    { timestamp: new Date('2024-01-05'), value: 115, metadata: {} },
   ];
 
+  const mockAnalysisResult: TrendAnalysisResult = {
+    trend: 'upward',
+    slope: 3.5,
+    confidence: 0.85,
+    predictions: [
+      { timestamp: new Date('2024-02-01'), predictedValue: 125, confidenceInterval: [120, 130] },
+    ],
+    seasonality: null,
+    anomalies: [],
+  };
+
   beforeEach(() => {
-    // Reset all mocks before each test
-    jest.clearAllMocks();
-
     // Create mock instances
-    mockRepository = new TrendDataRepository() as jest.Mocked<TrendDataRepository>;
-    mockLogger = new Logger('TrendDataService') as jest.Mocked<Logger>;
+    mockLogger = {
+      info: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    } as unknown as Logger;
 
-    // Initialize service with mocked dependencies
-    service = new TrendDataService(mockRepository, mockLogger);
+    mockMetricRepo = {
+      fetchTimeSeries: vi.fn(),
+    } as unknown as MetricRepository;
+
+    mockValidator = {
+      validateTimeRange: vi.fn(),
+      validateDataPoints: vi.fn(),
+    } as unknown as TimeSeriesValidator;
+
+    mockCalculator = {
+      calculateTrend: vi.fn(),
+      detectAnomalies: vi.fn(),
+      calculateSeasonality: vi.fn(),
+    } as unknown as TrendCalculator;
+
+    // Instantiate service with mocks
+    service = new TrendDataService({
+      logger: mockLogger,
+      metricRepository: mockMetricRepo,
+      validator: mockValidator,
+      calculator: mockCalculator,
+    });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
     it('should initialize with provided dependencies', () => {
-      const newService = new TrendDataService(mockRepository, mockLogger);
-      expect(newService).toBeDefined();
-      expect(newService).toBeInstanceOf(TrendDataService);
+      expect(service).toBeDefined();
     });
 
-    it('should throw error if repository is not provided', () => {
-      expect(() => {
-        new TrendDataService(undefined as unknown as TrendDataRepository, mockLogger);
-      }).toThrow('TrendDataRepository is required');
-    });
-
-    it('should throw error if logger is not provided', () => {
-      expect(() => {
-        new TrendDataService(mockRepository, undefined as unknown as Logger);
-      }).toThrow('Logger is required');
+    it('should throw error when required dependencies are missing', () => {
+      expect(() => new TrendDataService({} as any)).toThrow(TrendAnalysisError);
     });
   });
 
-  describe('getTrendData', () => {
-    const validQuery: TrendDataQuery = {
-      timeRange: validTimeRange,
-      metrics: ['cpu', 'memory'],
-      filters: { host: 'server-1' },
-    };
+  describe('analyzeTrend', () => {
+    it('should successfully analyze trend with valid config', async () => {
+      // Arrange: Setup mock return values
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
 
-    it('should successfully retrieve trend data for valid query', async () => {
-      // Arrange
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
+      // Act: Execute the method under test
+      const result = await service.analyzeTrend(mockConfig);
 
-      // Act
-      const result = await service.getTrendData(validQuery);
-
-      // Assert
-      expect(result).toEqual(mockTrendData);
-      expect(mockRepository.fetchTrendData).toHaveBeenCalledWith(validQuery);
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Fetching trend data',
-        expect.objectContaining({ query: validQuery })
-      );
-    });
-
-    it('should throw error for invalid time range', async () => {
-      // Arrange
-      const invalidQuery: TrendDataQuery = {
-        ...validQuery,
-        timeRange: {
-          startTime: new Date('2024-01-31T00:00:00Z'),
-          endTime: new Date('2024-01-01T00:00:00Z'), // End before start
-        },
-      };
-
-      // Act & Assert
-      await expect(service.getTrendData(invalidQuery)).rejects.toThrow(
-        'Invalid time range: endTime must be after startTime'
-      );
-      expect(mockLogger.error).toHaveBeenCalled();
-      expect(mockRepository.fetchTrendData).not.toHaveBeenCalled();
-    });
-
-    it('should throw error for empty metrics array', async () => {
-      // Arrange
-      const invalidQuery: TrendDataQuery = {
-        ...validQuery,
-        metrics: [],
-      };
-
-      // Act & Assert
-      await expect(service.getTrendData(invalidQuery)).rejects.toThrow(
-        'At least one metric must be specified'
-      );
-    });
-
-    it('should throw error for metrics array exceeding limit', async () => {
-      // Arrange
-      const invalidQuery: TrendDataQuery = {
-        ...validQuery,
-        metrics: Array(101).fill('metric'), // Exceeds 100 limit
-      };
-
-      // Act & Assert
-      await expect(service.getTrendData(invalidQuery)).rejects.toThrow(
-        'Metrics array exceeds maximum limit of 100'
-      );
-    });
-
-    it('should handle repository errors gracefully', async () => {
-      // Arrange
-      const repositoryError = new Error('Database connection failed');
-      mockRepository.fetchTrendData.mockRejectedValue(repositoryError);
-
-      // Act & Assert
-      await expect(service.getTrendData(validQuery)).rejects.toThrow(
-        'Failed to fetch trend data: Database connection failed'
-      );
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Error fetching trend data',
-        expect.objectContaining({
-          error: repositoryError.message,
-          query: validQuery,
-        })
-      );
-    });
-
-    it('should apply default filters when not provided', async () => {
-      // Arrange
-      const queryWithoutFilters: TrendDataQuery = {
-        timeRange: validTimeRange,
-        metrics: ['cpu'],
-      };
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
-
-      // Act
-      await service.getTrendData(queryWithoutFilters);
-
-      // Assert
-      expect(mockRepository.fetchTrendData).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filters: {},
-        })
-      );
-    });
-  });
-
-  describe('analyzeTrends', () => {
-    it('should successfully analyze trends with valid config', async () => {
-      // Arrange
-      const mockAnalysisResult: TrendAnalysisResult = {
-        trend: 'increasing',
-        slope: 2.5,
-        correlation: 0.85,
-        forecast: [
-          { timestamp: new Date('2024-02-01T00:00:00Z'), predictedValue: 60.0 },
-        ],
-        confidenceInterval: { lower: 55.0, upper: 65.0 },
-      };
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
-      mockRepository.calculateTrendAnalysis.mockResolvedValue(mockAnalysisResult);
-
-      // Act
-      const result = await service.analyzeTrends(validTimeRange, validConfig);
-
-      // Assert
+      // Assert: Verify the behavior and result
       expect(result).toEqual(mockAnalysisResult);
+      expect(mockValidator.validateTimeRange).toHaveBeenCalledWith(mockConfig.timeRange);
+      expect(mockMetricRepo.fetchTimeSeries).toHaveBeenCalledWith({
+        metricId: mockConfig.metricId,
+        start: mockConfig.timeRange.start,
+        end: mockConfig.timeRange.end,
+        granularity: mockConfig.granularity,
+      });
       expect(mockLogger.info).toHaveBeenCalledWith(
-        'Starting trend analysis',
-        expect.objectContaining({
-          timeRange: validTimeRange,
-          config: validConfig,
-        })
+        expect.stringContaining('Starting trend analysis'),
+        expect.objectContaining({ metricId: mockConfig.metricId })
       );
     });
 
-    it('should throw error for invalid confidence level', async () => {
-      // Arrange
-      const invalidConfig: TrendDataConfig = {
-        ...validConfig,
-        confidenceLevel: 1.5, // Invalid: must be between 0 and 1
-      };
+    it('should throw error when time range validation fails', async () => {
+      // Arrange: Setup validation to fail
+      const validationError = { isValid: false, errors: ['Invalid date range'] };
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue(validationError);
+
+      // Act & Assert: Verify error is thrown with correct details
+      await expect(service.analyzeTrend(mockConfig)).rejects.toThrow(TrendAnalysisError);
+      await expect(service.analyzeTrend(mockConfig)).rejects.toMatchObject({
+        code: ErrorCode.INVALID_TIME_RANGE,
+        details: { errors: validationError.errors },
+      });
+    });
+
+    it('should handle empty data points gracefully', async () => {
+      // Arrange: Setup empty data scenario
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue([]);
+
+      // Act & Assert: Verify appropriate error is thrown
+      await expect(service.analyzeTrend(mockConfig)).rejects.toThrow(TrendAnalysisError);
+      await expect(service.analyzeTrend(mockConfig)).rejects.toMatchObject({
+        code: ErrorCode.INSUFFICIENT_DATA,
+      });
+    });
+
+    it('should throw error when data point validation fails', async () => {
+      // Arrange: Setup data validation failure
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({
+        isValid: false,
+        errors: ['Invalid data format'],
+      });
 
       // Act & Assert
-      await expect(service.analyzeTrends(validTimeRange, invalidConfig)).rejects.toThrow(
-        'Confidence level must be between 0 and 1'
-      );
+      await expect(service.analyzeTrend(mockConfig)).rejects.toThrow(TrendAnalysisError);
     });
 
-    it('should throw error for unsupported aggregation interval', async () => {
-      // Arrange
-      const invalidConfig: TrendDataConfig = {
-        ...validConfig,
-        aggregationInterval: 'invalid' as unknown as TrendDataConfig['aggregationInterval'],
-      };
+    it('should handle repository errors with proper logging', async () => {
+      // Arrange: Simulate database/repository failure
+      const dbError = new Error('Connection timeout');
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockRejectedValue(dbError);
 
       // Act & Assert
-      await expect(service.analyzeTrends(validTimeRange, invalidConfig)).rejects.toThrow(
-        'Unsupported aggregation interval: invalid'
+      await expect(service.analyzeTrend(mockConfig)).rejects.toThrow(TrendAnalysisError);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch time series data'),
+        expect.objectContaining({ error: dbError.message })
       );
     });
 
-    it('should handle empty dataset gracefully', async () => {
+    it('should apply smoothing factor when calculating trend', async () => {
       // Arrange
-      mockRepository.fetchTrendData.mockResolvedValue([]);
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
+
+      const configWithSmoothing: TrendAnalysisConfig = {
+        ...mockConfig,
+        smoothingFactor: 0.5,
+      };
 
       // Act
-      const result = await service.analyzeTrends(validTimeRange, validConfig);
+      await service.analyzeTrend(configWithSmoothing);
+
+      // Assert: Verify smoothing factor is passed to calculator
+      expect(mockCalculator.calculateTrend).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ smoothingFactor: 0.5 })
+      );
+    });
+
+    it('should detect anomalies when configured', async () => {
+      // Arrange
+      const anomalies = [{ timestamp: new Date('2024-01-03'), severity: 'high' }];
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
+      vi.mocked(mockCalculator.detectAnomalies).mockReturnValue(anomalies);
+
+      const configWithAnomalyDetection: TrendAnalysisConfig = {
+        ...mockConfig,
+        detectAnomalies: true,
+      };
+
+      // Act
+      const result = await service.analyzeTrend(configWithAnomalyDetection);
 
       // Assert
-      expect(result).toEqual({
-        trend: 'insufficient_data',
-        slope: 0,
-        correlation: 0,
-        forecast: [],
-        confidenceInterval: null,
+      expect(mockCalculator.detectAnomalies).toHaveBeenCalledWith(mockDataPoints);
+      expect(result.anomalies).toEqual(anomalies);
+    });
+
+    it('should handle calculator errors gracefully', async () => {
+      // Arrange
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockImplementation(() => {
+        throw new Error('Calculation overflow');
       });
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Insufficient data for trend analysis',
+
+      // Act & Assert
+      await expect(service.analyzeTrend(mockConfig)).rejects.toThrow(TrendAnalysisError);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Trend calculation failed'),
         expect.any(Object)
       );
     });
 
-    it('should skip forecast calculation when disabled in config', async () => {
+    it('should cache results for identical requests', async () => {
       // Arrange
-      const configWithoutForecast: TrendDataConfig = {
-        ...validConfig,
-        includeForecast: false,
-      };
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
-      mockRepository.calculateTrendAnalysis.mockResolvedValue({
-        trend: 'stable',
-        slope: 0,
-        correlation: 0.1,
-        forecast: [],
-        confidenceInterval: null,
-      });
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
+
+      // Act: Call analyze twice with same config
+      await service.analyzeTrend(mockConfig);
+      await service.analyzeTrend(mockConfig);
+
+      // Assert: Repository should only be called once due to caching
+      expect(mockMetricRepo.fetchTimeSeries).toHaveBeenCalledTimes(1);
+      expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Cache hit'));
+    });
+
+    it('should bypass cache when forceRefresh is true', async () => {
+      // Arrange
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
 
       // Act
-      const result = await service.analyzeTrends(validTimeRange, configWithoutForecast);
+      await service.analyzeTrend(mockConfig);
+      await service.analyzeTrend({ ...mockConfig, forceRefresh: true });
 
-      // Assert
-      expect(result.forecast).toEqual([]);
-      expect(mockRepository.calculateForecast).not.toHaveBeenCalled();
+      // Assert: Repository should be called twice when forceRefresh is used
+      expect(mockMetricRepo.fetchTimeSeries).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('aggregateMetrics', () => {
-    const mockMetrics: TrendMetric[] = [
-      { name: 'cpu', value: 45.5, weight: 1.0 },
-      { name: 'cpu', value: 52.3, weight: 1.0 },
-      { name: 'memory', value: 78.0, weight: 0.8 },
+  describe('getTrendSummary', () => {
+    it('should return human-readable trend summary', async () => {
+      // Arrange
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
+
+      // Act
+      const summary = await service.getTrendSummary(mockConfig);
+
+      // Assert
+      expect(summary).toMatchObject({
+        direction: 'upward',
+        strength: expect.any(String),
+        keyInsight: expect.any(String),
+        recommendation: expect.any(String),
+      });
+    });
+
+    it('should handle downward trends appropriately', async () => {
+      // Arrange
+      const downwardResult: TrendAnalysisResult = {
+        ...mockAnalysisResult,
+        trend: 'downward',
+        slope: -5.2,
+      };
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(downwardResult);
+
+      // Act
+      const summary = await service.getTrendSummary(mockConfig);
+
+      // Assert
+      expect(summary.direction).toBe('downward');
+      expect(summary.recommendation).toContain('investigate');
+    });
+  });
+
+  describe('compareTrends', () => {
+    const mockConfigs: TrendAnalysisConfig[] = [
+      { ...mockConfig, metricId: 'metric-a' },
+      { ...mockConfig, metricId: 'metric-b' },
     ];
 
-    it('should calculate weighted average correctly', () => {
-      // Act
-      const result = service.aggregateMetrics(mockMetrics, 'weighted_average');
-
-      // Assert
-      expect(result).toBeCloseTo(57.89, 2);
-    });
-
-    it('should calculate simple average correctly', () => {
-      // Act
-      const result = service.aggregateMetrics(mockMetrics, 'average');
-
-      // Assert
-      expect(result).toBeCloseTo(58.6, 1);
-    });
-
-    it('should calculate maximum correctly', () => {
-      // Act
-      const result = service.aggregateMetrics(mockMetrics, 'max');
-
-      // Assert
-      expect(result).toBe(78.0);
-    });
-
-    it('should calculate minimum correctly', () => {
-      // Act
-      const result = service.aggregateMetrics(mockMetrics, 'min');
-
-      // Assert
-      expect(result).toBe(45.5);
-    });
-
-    it('should throw error for empty metrics array', () => {
-      // Act & Assert
-      expect(() => {
-        service.aggregateMetrics([], 'average');
-      }).toThrow('Cannot aggregate empty metrics array');
-    });
-
-    it('should throw error for unsupported aggregation method', () => {
-      // Act & Assert
-      expect(() => {
-        service.aggregateMetrics(mockMetrics, 'invalid_method' as unknown as string);
-      }).toThrow('Unsupported aggregation method: invalid_method');
-    });
-
-    it('should handle metrics with zero weights', () => {
+    it('should compare multiple trends successfully', async () => {
       // Arrange
-      const metricsWithZeroWeight: TrendMetric[] = [
-        { name: 'cpu', value: 50.0, weight: 0 },
-        { name: 'cpu', value: 60.0, weight: 1.0 },
+      const resultA: TrendAnalysisResult = { ...mockAnalysisResult, trend: 'upward', slope: 5 };
+      const resultB: TrendAnalysisResult = { ...mockAnalysisResult, trend: 'downward', slope: -3 };
+
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend)
+        .mockReturnValueOnce(resultA)
+        .mockReturnValueOnce(resultB);
+
+      // Act
+      const comparison = await service.compareTrends(mockConfigs);
+
+      // Assert
+      expect(comparison).toHaveLength(2);
+      expect(comparison[0].correlation).toBeDefined();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Comparing 2 trends')
+      );
+    });
+
+    it('should throw error when less than 2 configs provided', async () => {
+      // Act & Assert
+      await expect(service.compareTrends([mockConfig])).rejects.toThrow(TrendAnalysisError);
+      await expect(service.compareTrends([])).rejects.toThrow(TrendAnalysisError);
+    });
+
+    it('should calculate correlation between trends', async () => {
+      // Arrange
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(mockDataPoints);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
+
+      // Act
+      const comparison = await service.compareTrends(mockConfigs);
+
+      // Assert
+      expect(comparison[0].correlation).toBeGreaterThanOrEqual(-1);
+      expect(comparison[0].correlation).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe('edge cases and boundary conditions', () => {
+    it('should handle single data point', async () => {
+      // Arrange
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue([mockDataPoints[0]]);
+
+      // Act & Assert
+      await expect(service.analyzeTrend(mockConfig)).rejects.toThrow(TrendAnalysisError);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Insufficient data points')
+      );
+    });
+
+    it('should handle very large datasets efficiently', async () => {
+      // Arrange: Create large dataset
+      const largeDataset: TrendDataPoint[] = Array.from({ length: 10000 }, (_, i) => ({
+        timestamp: new Date(Date.now() - i * 86400000),
+        value: Math.random() * 1000,
+        metadata: {},
+      }));
+
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(largeDataset);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
+
+      // Act
+      const startTime = Date.now();
+      await service.analyzeTrend(mockConfig);
+      const duration = Date.now() - startTime;
+
+      // Assert: Should complete within reasonable time (adjust threshold as needed)
+      expect(duration).toBeLessThan(1000);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Processing 10000 data points')
+      );
+    });
+
+    it('should handle null values in data points', async () => {
+      // Arrange
+      const dataWithNulls: TrendDataPoint[] = [
+        ...mockDataPoints,
+        { timestamp: new Date('2024-01-06'), value: null as any, metadata: {} },
       ];
 
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockMetricRepo.fetchTimeSeries).mockResolvedValue(dataWithNulls);
+      vi.mocked(mockValidator.validateDataPoints).mockReturnValue({ isValid: true, errors: [] });
+      vi.mocked(mockCalculator.calculateTrend).mockReturnValue(mockAnalysisResult);
+
       // Act
-      const result = service.aggregateMetrics(metricsWithZeroWeight, 'weighted_average');
+      const result = await service.analyzeTrend(mockConfig);
 
       // Assert
-      expect(result).toBe(60.0);
-    });
-  });
-
-  describe('validateTrendData', () => {
-    it('should return true for valid trend data', () => {
-      // Act
-      const result = service.validateTrendData(mockTrendData[0]);
-
-      // Assert
-      expect(result.isValid).toBe(true);
-      expect(result.errors).toHaveLength(0);
+      expect(result).toBeDefined();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Null values detected')
+      );
     });
 
-    it('should detect missing timestamp', () => {
+    it('should respect maximum time range limits', async () => {
       // Arrange
-      const invalidData = { ...mockTrendData[0], timestamp: undefined };
-
-      // Act
-      const result = service.validateTrendData(invalidData as unknown as TrendData);
-
-      // Assert
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Timestamp is required');
-    });
-
-    it('should detect invalid timestamp', () => {
-      // Arrange
-      const invalidData = { ...mockTrendData[0], timestamp: 'invalid-date' };
-
-      // Act
-      const result = service.validateTrendData(invalidData as unknown as TrendData);
-
-      // Assert
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Invalid timestamp format');
-    });
-
-    it('should detect missing metric name', () => {
-      // Arrange
-      const invalidData = { ...mockTrendData[0], metric: '' };
-
-      // Act
-      const result = service.validateTrendData(invalidData);
-
-      // Assert
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Metric name is required');
-    });
-
-    it('should detect out-of-range value', () => {
-      // Arrange
-      const invalidData = { ...mockTrendData[0], value: -1 };
-
-      // Act
-      const result = service.validateTrendData(invalidData);
-
-      // Assert
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Value must be non-negative');
-    });
-
-    it('should detect NaN value', () => {
-      // Arrange
-      const invalidData = { ...mockTrendData[0], value: NaN };
-
-      // Act
-      const result = service.validateTrendData(invalidData);
-
-      // Assert
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Value must be a valid number');
-    });
-
-    it('should collect multiple validation errors', () => {
-      // Arrange
-      const invalidData = {
-        timestamp: 'invalid',
-        metric: '',
-        value: -5,
+      const invalidConfig: TrendAnalysisConfig = {
+        ...mockConfig,
+        timeRange: {
+          start: new Date('2020-01-01'),
+          end: new Date('2024-01-01'), // 4 year range
+        },
       };
 
-      // Act
-      const result = service.validateTrendData(invalidData as unknown as TrendData);
+      vi.mocked(mockValidator.validateTimeRange).mockReturnValue({
+        isValid: false,
+        errors: ['Time range exceeds maximum allowed'],
+      });
 
-      // Assert
-      expect(result.isValid).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(1);
-    });
-  });
-
-  describe('exportTrendData', () => {
-    const exportQuery: TrendDataQuery = {
-      timeRange: validTimeRange,
-      metrics: ['cpu'],
-    };
-
-    it('should export data in JSON format', async () => {
-      // Arrange
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
-
-      // Act
-      const result = await service.exportTrendData(exportQuery, 'json');
-
-      // Assert
-      expect(result.format).toBe('json');
-      expect(result.data).toEqual(JSON.stringify(mockTrendData, null, 2));
-      expect(result.contentType).toBe('application/json');
-    });
-
-    it('should export data in CSV format', async () => {
-      // Arrange
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
-
-      // Act
-      const result = await service.exportTrendData(exportQuery, 'csv');
-
-      // Assert
-      expect(result.format).toBe('csv');
-      expect(result.contentType).toBe('text/csv');
-      expect(result.data).toContain('timestamp,metric,value');
-      expect(result.data).toContain('cpu,45.5');
-    });
-
-    it('should throw error for unsupported export format', async () => {
       // Act & Assert
-      await expect(
-        service.exportTrendData(exportQuery, 'xml' as unknown as 'json' | 'csv')
-      ).rejects.toThrow('Unsupported export format: xml');
-    });
-
-    it('should handle large datasets with pagination', async () => {
-      // Arrange
-      const largeDataset = Array(1000).fill(mockTrendData[0]);
-      mockRepository.fetchTrendData.mockResolvedValue(largeDataset);
-
-      // Act
-      const result = await service.exportTrendData(exportQuery, 'json');
-
-      // Assert
-      expect(result.data).toBeDefined();
-      expect(result.recordCount).toBe(1000);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Exporting large dataset',
-        expect.objectContaining({ recordCount: 1000 })
-      );
-    });
-  });
-
-  describe('cache management', () => {
-    it('should cache trend data results', async () => {
-      // Arrange
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
-
-      // Act
-      await service.getTrendData({
-        timeRange: validTimeRange,
-        metrics: ['cpu'],
-      });
-      await service.getTrendData({
-        timeRange: validTimeRange,
-        metrics: ['cpu'],
-      });
-
-      // Assert
-      expect(mockRepository.fetchTrendData).toHaveBeenCalledTimes(1);
-      expect(mockLogger.debug).toHaveBeenCalledWith('Cache hit for trend data query');
-    });
-
-    it('should invalidate cache on demand', () => {
-      // Act
-      service.invalidateCache();
-
-      // Assert
-      expect(mockLogger.info).toHaveBeenCalledWith('Trend data cache invalidated');
-    });
-
-    it('should respect cache TTL', async () => {
-      // Arrange
-      jest.useFakeTimers();
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
-
-      // Act
-      await service.getTrendData({
-        timeRange: validTimeRange,
-        metrics: ['cpu'],
-      });
-
-      // Advance time beyond cache TTL (5 minutes)
-      jest.advanceTimersByTime(6 * 60 * 1000);
-
-      await service.getTrendData({
-        timeRange: validTimeRange,
-        metrics: ['cpu'],
-      });
-
-      // Assert
-      expect(mockRepository.fetchTrendData).toHaveBeenCalledTimes(2);
-      expect(mockLogger.debug).toHaveBeenCalledWith('Cache miss: entry expired');
-
-      jest.useRealTimers();
-    });
-  });
-
-  describe('performance monitoring', () => {
-    it('should track query execution time', async () => {
-      // Arrange
-      mockRepository.fetchTrendData.mockResolvedValue(mockTrendData);
-
-      // Act
-      await service.getTrendData({
-        timeRange: validTimeRange,
-        metrics: ['cpu'],
-      });
-
-      // Assert
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Trend data query completed',
-        expect.objectContaining({
-          durationMs: expect.any(Number),
-          recordCount: expect.any(Number),
-        })
-      );
-    });
-
-    it('should log slow queries', async () => {
-      // Arrange
-      mockRepository.fetchTrendData.mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            setTimeout(() => resolve(mockTrendData), 2000);
-          })
-      );
-
-      // Act
-      await service.getTrendData({
-        timeRange: validTimeRange,
-        metrics: ['cpu'],
-      });
-
-      // Assert
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Slow trend data query detected',
-        expect.objectContaining({
-          durationMs: expect.any(Number),
-          thresholdMs: 1000,
-        })
-      );
+      await expect(service.analyzeTrend(invalidConfig)).rejects.toThrow(TrendAnalysisError);
     });
   });
 });
