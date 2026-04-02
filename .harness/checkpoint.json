@@ -1,72 +1,56 @@
 {
-  "timestamp": 1775117727681,
-  "currentTask": null,
+  "timestamp": 1775117770675,
+  "currentTask": {
+    "id": "evolution-coverage-1775117722694-8n88j",
+    "title": "Add tests for trends.ts",
+    "description": "File src\\lib\\ai\\types\\trends.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\ai\\types\\trends.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\ai\\types\\trends.ts\n  Location: src\\lib\\ai\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\ai\\types\\trends.ts",
+    "requirements": [
+      "Create test file: src\\lib\\ai\\types\\trends.test.ts",
+      "Test core functionality",
+      "Test edge cases",
+      "Tests must pass in CI",
+      "Coverage report generated"
+    ],
+    "priority": "medium",
+    "status": "running",
+    "category": "testing",
+    "maxDuration": 6480000,
+    "createdAt": "2026-04-02T08:15:22.713Z",
+    "startedAt": "2026-04-02T08:16:03.775Z"
+  },
   "stats": {
     "completed": 0,
-    "failed": 10,
+    "failed": 267,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
-    "failed": 0,
+    "failed": 267,
     "escalated": 0,
-    "startTime": 1775117127660
+    "startTime": 1775115370630
   },
   "queueState": {
-    "queue": [
+    "queue": [],
+    "activeTasks": [
       {
-        "id": "evolution-coverage-1775115276261-fdv2k",
-        "title": "Add tests for page.tsx",
-        "description": "File src\\app\\page.tsx appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\app\\page.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\app\\page.tsx\n  Location: src\\app\\page.tsx\n\n📁 Related Files:\n- src\\app\\page.tsx",
-        "requirements": [
-          "Create test file: src\\app\\page.test.ts",
-          "Test core functionality",
-          "Test edge cases",
-          "Tests must pass in CI",
-          "Coverage report generated"
-        ],
-        "priority": "medium",
-        "status": "pending",
-        "category": "testing",
-        "maxDuration": 6480000,
-        "createdAt": "2026-04-02T07:34:36.293Z"
-      },
-      {
-        "id": "evolution-coverage-1775115276261-y9rtr",
-        "title": "Add tests for layout.tsx",
-        "description": "File src\\app\\layout.tsx appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\app\\layout.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\app\\layout.tsx\n  Location: src\\app\\layout.tsx\n\n📁 Related Files:\n- src\\app\\layout.tsx",
-        "requirements": [
-          "Create test file: src\\app\\layout.test.ts",
-          "Test core functionality",
-          "Test edge cases",
-          "Tests must pass in CI",
-          "Coverage report generated"
-        ],
-        "priority": "medium",
-        "status": "pending",
-        "category": "testing",
-        "maxDuration": 6480000,
-        "createdAt": "2026-04-02T07:34:36.293Z"
-      },
-      {
-        "id": "evolution-coverage-1775115276261-qpony",
+        "id": "evolution-coverage-1775117722694-8n88j",
         "title": "Add tests for trends.ts",
-        "description": "File src\\lib\\types\\trends.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\types\\trends.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\types\\trends.ts\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
+        "description": "File src\\lib\\ai\\types\\trends.ts appears to lack corresponding unit tests.\n\n📊 Impact Score: 6/10\n\n🎯 Suggested Approach:\n1. Create test file: src\\lib\\ai\\types\\trends.test.ts\n2. Test core functionality\n3. Test edge cases\n\n📋 Evidence:\n- [missing_feature] No test file found for src\\lib\\ai\\types\\trends.ts\n  Location: src\\lib\\ai\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\ai\\types\\trends.ts",
         "requirements": [
-          "Create test file: src\\lib\\types\\trends.test.ts",
+          "Create test file: src\\lib\\ai\\types\\trends.test.ts",
           "Test core functionality",
           "Test edge cases",
           "Tests must pass in CI",
           "Coverage report generated"
         ],
         "priority": "medium",
-        "status": "pending",
+        "status": "running",
         "category": "testing",
         "maxDuration": 6480000,
-        "createdAt": "2026-04-02T07:34:36.293Z"
+        "createdAt": "2026-04-02T08:15:22.713Z",
+        "startedAt": "2026-04-02T08:16:03.775Z"
       }
-    ],
-    "activeTasks": []
+    ]
   },
   "hasGeneratedInitialTasks": true
 }
