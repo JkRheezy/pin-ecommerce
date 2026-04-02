@@ -33,6 +33,12 @@ checkpoint:
   enabled: true
   interval: 300000
 
+# Superpowers 技能配置
+superpowers:
+  enabled: true
+  # 使用系统 skill 路径（支持所有内置技能）
+  skillsPath: C:\Users\czy\.config\agents\skills
+
 # PR 自动化配置
 pr:
   autoCreate: true
