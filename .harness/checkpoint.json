@@ -1,9 +1,9 @@
 {
-  "timestamp": 1775199281933,
+  "timestamp": 1775200181958,
   "currentTask": {
-    "id": "evolution-longfile-1775197624306-8m76r",
-    "title": "Refactor long file: workflow.ts",
-    "description": "File src\\lib\\ai\\workflow.ts has 346 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 346 lines\n  Location: src\\lib\\ai\\workflow.ts\n\n📁 Related Files:\n- src\\lib\\ai\\workflow.ts",
+    "id": "evolution-longfile-1775197624307-3rzhd",
+    "title": "Refactor long file: test-types.ts",
+    "description": "File src\\app\\__tests__\\test-types.ts has 499 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 499 lines\n  Location: src\\app\\__tests__\\test-types.ts\n\n📁 Related Files:\n- src\\app\\__tests__\\test-types.ts",
     "requirements": [
       "Identify cohesive groups of functionality",
       "Extract into separate modules",
@@ -14,36 +14,21 @@
     "category": "technical_debt",
     "maxDuration": 3600000,
     "createdAt": "2026-04-03T06:27:04.327Z",
-    "startedAt": "2026-04-03T06:41:49.799Z"
+    "startedAt": "2026-04-03T06:55:04.038Z"
   },
   "stats": {
     "completed": 0,
-    "failed": 25,
+    "failed": 26,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
-    "failed": 19,
+    "failed": 20,
     "escalated": 0,
     "startTime": 1775185463716
   },
   "queueState": {
     "queue": [
-      {
-        "id": "evolution-longfile-1775197624307-3rzhd",
-        "title": "Refactor long file: test-types.ts",
-        "description": "File src\\app\\__tests__\\test-types.ts has 499 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 499 lines\n  Location: src\\app\\__tests__\\test-types.ts\n\n📁 Related Files:\n- src\\app\\__tests__\\test-types.ts",
-        "requirements": [
-          "Identify cohesive groups of functionality",
-          "Extract into separate modules",
-          "Update imports"
-        ],
-        "priority": "medium",
-        "status": "pending",
-        "category": "technical_debt",
-        "maxDuration": 3600000,
-        "createdAt": "2026-04-03T06:27:04.327Z"
-      },
       {
         "id": "evolution-longfile-1775197624307-2l2v3",
         "title": "Refactor long file: test-setup.ts",
@@ -62,9 +47,9 @@
     ],
     "activeTasks": [
       {
-        "id": "evolution-longfile-1775197624306-8m76r",
-        "title": "Refactor long file: workflow.ts",
-        "description": "File src\\lib\\ai\\workflow.ts has 346 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 346 lines\n  Location: src\\lib\\ai\\workflow.ts\n\n📁 Related Files:\n- src\\lib\\ai\\workflow.ts",
+        "id": "evolution-longfile-1775197624307-3rzhd",
+        "title": "Refactor long file: test-types.ts",
+        "description": "File src\\app\\__tests__\\test-types.ts has 499 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 499 lines\n  Location: src\\app\\__tests__\\test-types.ts\n\n📁 Related Files:\n- src\\app\\__tests__\\test-types.ts",
         "requirements": [
           "Identify cohesive groups of functionality",
           "Extract into separate modules",
@@ -75,7 +60,7 @@
         "category": "technical_debt",
         "maxDuration": 3600000,
         "createdAt": "2026-04-03T06:27:04.327Z",
-        "startedAt": "2026-04-03T06:41:49.799Z"
+        "startedAt": "2026-04-03T06:55:04.038Z"
       }
     ]
   },

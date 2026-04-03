@@ -1,45 +1,116 @@
 /**
  * Test Types Layer
  * 
- * This file contains all TypeScript types, interfaces, and type utilities
- * for the test infrastructure. Following the six-layer architecture,
+ * This file re-exports all types from the modularized type definitions
+ * for backward compatibility. Following the six-layer architecture,
  * this is the foundational Types layer with no external dependencies.
+ * 
+ * @deprecated Import directly from specific modules (test-core.types, test-config.types, etc.)
  */
 
-import { z } from 'zod';
+// Re-export from core types
+export {
+  TestId,
+  TestStatus,
+  TestSeverity,
+  TestPriority,
+  TestCategory,
+  TestType,
+  TestOwner,
+  TestTag,
+  TestMetadata,
+  TestIdentifier,
+  createTestId,
+  isValidTestId,
+} from './test-core.types';
 
-// ============================================================================
-// Base Type Definitions
-// ============================================================================
+// Re-export from config types
+export {
+  TestConfig,
+  TestEnvironment,
+  TestFramework,
+  TestTimeout,
+  TestRetryPolicy,
+  TestParallelization,
+  TestConfigSchema,
+  defaultTestConfig,
+  validateTestConfig,
+} from './test-config.types';
 
-/**
- * Unique identifier for test entities
- */
-export type TestId = string & { readonly __brand: 'TestId' };
+// Re-export from result types
+export {
+  TestResult,
+  TestAssertion,
+  TestFailure,
+  TestError,
+  TestDuration,
+  TestOutcome,
+  TestResultSchema,
+  createTestResult,
+  isFailedResult,
+  isPassedResult,
+} from './test-result.types';
 
-/**
- * Test execution status states
- */
-export enum TestStatus {
-  PENDING = 'PENDING',
-  RUNNING = 'RUNNING',
-  PASSED = 'PASSED',
-  FAILED = 'FAILED',
-  SKIPPED = 'SKIPPED',
-  TIMEOUT = 'TIMEOUT',
-  ERROR = 'ERROR',
-}
+// Re-export from suite types
+export {
+  TestSuite,
+  TestSuiteConfig,
+  TestSuiteResult,
+  TestSuiteStats,
+  TestSuiteHook,
+  TestSuiteLifecycle,
+  createTestSuite,
+  addTestToSuite,
+} from './test-suite.types';
 
-/**
- * Severity levels for test failures
- */
-export enum TestSeverity {
-  CRITICAL = 'CRITICAL',
-  HIGH = 'HIGH',
-  MEDIUM = 'MEDIUM',
-  LOW = 'LOW',
-  INFO = 'INFO',
-}
+// Re-export from runner types
+export {
+  TestRunner,
+  TestRunnerConfig,
+  TestRunnerState,
+  TestRunnerEvent,
+  TestRunnerHook,
+  TestRunnerOptions,
+  TestRunnerEventType,
+  createTestRunner,
+} from './test-runner.types';
+
+// Re-export from report types
+export {
+  TestReport,
+  TestReportFormat,
+  TestReportConfig,
+  TestReportSection,
+  TestReportMetrics,
+  TestReportArtifact,
+  generateTestReport,
+} from './test-report.types';
+
+// Re-export from mock types
+export {
+  TestMock,
+  TestStub,
+  TestSpy,
+  TestMockConfig,
+  TestMockCall,
+  TestMockReturn,
+  createMock,
+  createStub,
+  createSpy,
+  resetAllMocks,
+} from './test-mock.types';
+
+// Re-export from util types
+export {
+  TestFilter,
+  TestMatcher,
+  TestComparator,
+  TestPredicate,
+  TestTransform,
+  createTestFilter,
+  createTestMatcher,
+  composeFilters,
+} from './test-util.types';
 
 // ============================================================================
 // Core Test Interfaces
