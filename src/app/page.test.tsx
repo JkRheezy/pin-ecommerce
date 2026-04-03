@@ -19,14 +19,7 @@ describe('Page Component (deprecated)', () => {
   it('placeholder - tests moved to new structure', () => {
     // Tests removed after refactoring - see file header for new locations
   });
-}); = {
-    id: 'test-pipeline-001',
-    name: 'Test Pipeline',
-    version: '1.0.0',
-    stages: [
-      {
-        id: 'stage-1',
-        type: 'BUILD',
+});    type: 'BUILD',
         name: 'Build Stage',
         enabled: true,
         config: {
