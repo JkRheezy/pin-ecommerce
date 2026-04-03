@@ -1,9 +1,9 @@
 {
-  "timestamp": 1775188163776,
+  "timestamp": 1775189063797,
   "currentTask": {
-    "id": "evolution-longfile-1775186705188-x2b0r",
-    "title": "Refactor long file: trends.ts",
-    "description": "File src\\lib\\types\\trends.ts has 790 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 790 lines\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
+    "id": "evolution-longfile-1775186705189-yheup",
+    "title": "Refactor long file: orchestrator.ts",
+    "description": "File src\\lib\\ai\\orchestrator.ts has 589 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 589 lines\n  Location: src\\lib\\ai\\orchestrator.ts\n\n📁 Related Files:\n- src\\lib\\ai\\orchestrator.ts",
     "requirements": [
       "Identify cohesive groups of functionality",
       "Extract into separate modules",
@@ -14,21 +14,22 @@
     "category": "technical_debt",
     "maxDuration": 3600000,
     "createdAt": "2026-04-03T03:25:05.229Z",
-    "startedAt": "2026-04-03T03:43:25.612Z"
+    "startedAt": "2026-04-03T03:51:45.114Z"
   },
   "stats": {
     "completed": 0,
-    "failed": 11,
+    "failed": 12,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
-    "failed": 5,
+    "failed": 6,
     "escalated": 0,
     "startTime": 1775185463716
   },
   "queueState": {
-    "queue": [
+    "queue": [],
+    "activeTasks": [
       {
         "id": "evolution-longfile-1775186705189-yheup",
         "title": "Refactor long file: orchestrator.ts",
@@ -39,28 +40,11 @@
           "Update imports"
         ],
         "priority": "medium",
-        "status": "pending",
-        "category": "technical_debt",
-        "maxDuration": 3600000,
-        "createdAt": "2026-04-03T03:25:05.229Z"
-      }
-    ],
-    "activeTasks": [
-      {
-        "id": "evolution-longfile-1775186705188-x2b0r",
-        "title": "Refactor long file: trends.ts",
-        "description": "File src\\lib\\types\\trends.ts has 790 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 790 lines\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
-        "requirements": [
-          "Identify cohesive groups of functionality",
-          "Extract into separate modules",
-          "Update imports"
-        ],
-        "priority": "medium",
         "status": "running",
         "category": "technical_debt",
         "maxDuration": 3600000,
         "createdAt": "2026-04-03T03:25:05.229Z",
-        "startedAt": "2026-04-03T03:43:25.612Z"
+        "startedAt": "2026-04-03T03:51:45.114Z"
       }
     ]
   },
