@@ -1,31 +1,19 @@
 /**
  * Test Utilities Module
  * 
- * Shared test helpers and setup utilities following the six-layer architecture.
- * This module provides common testing infrastructure for all test layers.
+ * Re-export from new modular test-utils structure.
+ * This file is maintained for backward compatibility.
  * 
+ * @deprecated Import from '@test-utils' path alias instead
  * Layer: Repo → Service → Runtime (Test Infrastructure)
  */
 
-import React, { ReactElement } from 'react';
-import { render, RenderOptions, RenderResult } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, MemoryRouterProps } from 'react-router-dom';
-import type { Logger } from '../types/logger.types';
+// Re-export all test utilities from new modular structure
+export * from './test-utils/index';
 
-// ============================================
-// TYPES LAYER: Test Utility Types
-// ============================================
-
-/**
- * Configuration options for test wrapper setup
- */
-export interface TestWrapperConfig {
-  /** Initial route for MemoryRouter */
-  initialRoute?: string;
-  /** Route entries for MemoryRouter */
-  initialEntries?: MemoryRouterProps['initialEntries'];
-  /** Initial index in history stack */
+// For backward compatibility - explicitly re-export common items
+export { renderWithProviders, createTestQueryClient, TestWrapper } from './test-utils/index';
+export type { TestWrapperConfig, RenderWithProvidersOptions } from './test-utils/index';
   initialIndex?: number;
   /** Query client options override */
   queryClientOptions?: ConstructorParameters<typeof QueryClient>[0];

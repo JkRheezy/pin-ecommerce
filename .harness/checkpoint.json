@@ -1,9 +1,9 @@
 {
-  "timestamp": 1775178321534,
+  "timestamp": 1775185763722,
   "currentTask": {
-    "id": "evolution-longfile-1775176821505-fidft",
-    "title": "Refactor long file: page.test.tsx",
-    "description": "File src\\app\\page.test.tsx has 357 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 357 lines\n  Location: src\\app\\page.test.tsx\n\n📁 Related Files:\n- src\\app\\page.test.tsx",
+    "id": "evolution-longfile-1775176821506-03ty6",
+    "title": "Refactor long file: test-utils.tsx",
+    "description": "File src\\app\\__tests__\\test-utils.tsx has 444 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 444 lines\n  Location: src\\app\\__tests__\\test-utils.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\test-utils.tsx",
     "requirements": [
       "Identify cohesive groups of functionality",
       "Extract into separate modules",
@@ -14,36 +14,21 @@
     "category": "technical_debt",
     "maxDuration": 3600000,
     "createdAt": "2026-04-03T00:40:21.534Z",
-    "startedAt": "2026-04-03T00:50:28.261Z"
+    "startedAt": "2026-04-03T03:04:23.719Z"
   },
   "stats": {
     "completed": 0,
-    "failed": 5,
+    "failed": 6,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
-    "failed": 2,
+    "failed": 0,
     "escalated": 0,
-    "startTime": 1775176821486
+    "startTime": 1775185463716
   },
   "queueState": {
     "queue": [
-      {
-        "id": "evolution-longfile-1775176821506-03ty6",
-        "title": "Refactor long file: test-utils.tsx",
-        "description": "File src\\app\\__tests__\\test-utils.tsx has 444 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 444 lines\n  Location: src\\app\\__tests__\\test-utils.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\test-utils.tsx",
-        "requirements": [
-          "Identify cohesive groups of functionality",
-          "Extract into separate modules",
-          "Update imports"
-        ],
-        "priority": "medium",
-        "status": "pending",
-        "category": "technical_debt",
-        "maxDuration": 3600000,
-        "createdAt": "2026-04-03T00:40:21.534Z"
-      },
       {
         "id": "evolution-longfile-1775176821507-5tt04",
         "title": "Refactor long file: product-card.test.tsx",
@@ -62,9 +47,9 @@
     ],
     "activeTasks": [
       {
-        "id": "evolution-longfile-1775176821505-fidft",
-        "title": "Refactor long file: page.test.tsx",
-        "description": "File src\\app\\page.test.tsx has 357 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 357 lines\n  Location: src\\app\\page.test.tsx\n\n📁 Related Files:\n- src\\app\\page.test.tsx",
+        "id": "evolution-longfile-1775176821506-03ty6",
+        "title": "Refactor long file: test-utils.tsx",
+        "description": "File src\\app\\__tests__\\test-utils.tsx has 444 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 444 lines\n  Location: src\\app\\__tests__\\test-utils.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\test-utils.tsx",
         "requirements": [
           "Identify cohesive groups of functionality",
           "Extract into separate modules",
@@ -75,7 +60,7 @@
         "category": "technical_debt",
         "maxDuration": 3600000,
         "createdAt": "2026-04-03T00:40:21.534Z",
-        "startedAt": "2026-04-03T00:50:28.261Z"
+        "startedAt": "2026-04-03T03:04:23.719Z"
       }
     ]
   },
