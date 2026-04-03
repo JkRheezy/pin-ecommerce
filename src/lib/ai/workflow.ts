@@ -45,6 +45,8 @@ export interface ProductWorkflowState {
 
 // ==================== LLM 调用 ====================
 
+import { logger } from '@harness/logging'
+
 async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
   const response = await fetch(`${process.env.LLM_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`, {
     method: 'POST',
