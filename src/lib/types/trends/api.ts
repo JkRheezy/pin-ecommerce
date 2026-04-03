@@ -1,143 +1,169 @@
 /**
  * Trends API Types - Layer 1: Types
  * 
- * This module defines all request/response types for the Trends API.
- * Following the six-layer architecture, these types are pure data structures
- * with no business logic.
+ * Defines all API request/response types for the Trends module.
+ * These types ensure type safety across the entire Trends API surface.
  */
 
 import { z } from 'zod';
-import { TrendDirection, TrendSeverity, TrendGranularity } from './core';
+import { TrendDirection, TrendCategory, TrendGranularity } from './core';
+
+// ============================================================================
+// Base API Types
+// ============================================================================
+
+/**
+ * Standard API response wrapper for all Trends endpoints
+ */
+export interface TrendsApiResponse<T> {
+  /** Response status */
+  status: 'success' | 'error';
+  /** Response data payload */
+  data: T;
+  /** ISO 8601 timestamp of the response */
+  timestamp: string;
+  /** Request correlation ID for tracing */
+  correlationId: string;
+  /** Optional pagination metadata */
+  pagination?: PaginationMetadata;
+  /** Optional error details when status is 'error' */
+  error?: ApiErrorDetails;
+}
+
+/**
+ * Pagination metadata for paginated responses
+ */
+export interface PaginationMetadata {
+  /** Current page number (1-based) */
+  page: number;
+  /** Number of items per page */
+  pageSize: number;
+  /** Total number of items across all pages */
+  totalItems: number;
+  /** Total number of pages */
+  totalPages: number;
+  /** Whether a next page exists */
+  hasNextPage: boolean;
+  /** Whether a previous page exists */
+  hasPreviousPage: boolean;
+}
+
+/**
+ * Detailed API error information
+ */
+export interface ApiErrorDetails {
+  /** Machine-readable error code */
+  code: string;
+  /** Human-readable error message */
+  message: string;
+  /** Additional error context */
+  details?: Record<string, unknown>;
+  /** Field-level validation errors */
+  fieldErrors?: FieldValidationError[];
+}
+
+/**
+ * Field-level validation error
+ */
+export interface FieldValidationError {
+  /** Path to the field with error */
+  field: string;
+  /** Error message for this field */
+  message: string;
+  /** Error code */
+  code: string;
+}
 
 // ============================================================================
 // Request Types
 // ============================================================================
 
 /**
- * Base pagination parameters for trend list requests
+ * Base request parameters for trend queries
  */
-export interface TrendListRequest {
-  /** Maximum number of results to return (default: 20, max: 100) */
-  limit?: number;
-  
-  /** Offset for pagination (default: 0) */
-  offset?: number;
-  
-  /** Filter by specific metric identifiers */
-  metricIds?: string[];
-  
-  /** Filter by trend direction */
-  direction?: TrendDirection;
-  
-  /** Filter by minimum severity level */
-  minSeverity?: TrendSeverity;
-  
-  /** Time range start (ISO 8601 timestamp) */
-  startTime?: string;
-  
-  /** Time range end (ISO 8601 timestamp) */
-  endTime?: string;
-  
-  /** Data granularity for aggregation */
-  granularity?: TrendGranularity;
-}
-
-/**
- * Request to create a new trend analysis
- */
-export interface CreateTrendRequest {
-  /** Human-readable name for the trend */
-  name: string;
-  
-  /** Description of what this trend tracks */
-  description?: string;
-  
-  /** Metric identifier to analyze */
-  metricId: string;
-  
-  /** Analysis configuration */
-  config: {
-    /** Detection algorithm to use */
-    algorithm: 'linear_regression' | 'moving_average' | 'anomaly_detection';
-    
-    /** Sensitivity threshold (0.0 - 1.0) */
-    sensitivity: number;
-    
-    /** Minimum data points required for analysis */
-    minDataPoints: number;
-    
-    /** Lookback window in hours */
-    lookbackHours: number;
-  };
-  
-  /** Alert configuration */
-  alerts?: {
-    /** Enable alerts for this trend */
-    enabled: boolean;
-    
-    /** Severity levels that trigger alerts */
-    triggerOn: TrendSeverity[];
-    
-    /** Notification channel IDs */
-    channelIds: string[];
-  };
-}
-
-/**
- * Request to update an existing trend
- */
-export interface UpdateTrendRequest {
-  /** Updated name (optional) */
-  name?: string;
-  
-  /** Updated description (optional) */
-  description?: string;
-  
-  /** Updated configuration (partial update) */
-  config?: Partial<CreateTrendRequest['config']>;
-  
-  /** Updated alert configuration (optional) */
-  alerts?: CreateTrendRequest['alerts'];
-}
-
-/**
- * Request to query trend data points
- */
-export interface TrendDataRequest {
-  /** Trend identifier */
-  trendId: string;
-  
-  /** Start of time range (ISO 8601) */
-  startTime: string;
-  
-  /** End of time range (ISO 8601) */
-  endTime: string;
-  
+export interface GetTrendsRequest {
+  /** Start date for the trend period (ISO 8601) */
+  startDate: string;
+  /** End date for the trend period (ISO 8601) */
+  endDate: string;
   /** Data granularity */
   granularity: TrendGranularity;
-  
-  /** Include forecasted values */
-  includeForecast?: boolean;
-  
-  /** Forecast horizon in data points */
-  forecastHorizon?: number;
+  /** Optional category filter */
+  category?: TrendCategory;
+  /** Optional metric name filter */
+  metricName?: string;
 }
 
 /**
- * Request to compare multiple trends
+ * Request parameters for trend comparison
  */
-export interface TrendComparisonRequest {
-  /** Trend identifiers to compare */
-  trendIds: string[];
-  
-  /** Normalization method for comparison */
-  normalization: 'none' | 'percent_change' | 'z_score' | 'min_max';
-  
-  /** Time range for comparison */
-  timeRange: {
-    start: string;
-    end: string;
+export interface CompareTrendsRequest {
+  /** Base period for comparison */
+  basePeriod: {
+    startDate: string;
+    endDate: string;
   };
+  /** Comparison period */
+  comparisonPeriod: {
+    startDate: string;
+    endDate: string;
+  };
+  /** Metrics to compare */
+  metrics: string[];
+  /** Data granularity */
+  granularity: TrendGranularity;
+}
+
+/**
+ * Request for creating a trend alert
+ */
+export interface CreateTrendAlertRequest {
+  /** Alert name */
+  name: string;
+  /** Metric to monitor */
+  metricName: string;
+  /** Alert condition */
+  condition: AlertCondition;
+  /** Notification channels */
+  notifications: NotificationConfig[];
+  /** Optional category scope */
+  category?: TrendCategory;
+}
+
+/**
+ * Alert condition configuration
+ */
+export interface AlertCondition {
+  /** Condition type */
+  type: 'threshold' | 'anomaly' | 'trend_change';
+  /** Operator for threshold conditions */
+  operator?: 'gt' | 'lt' | 'eq' | 'gte' | 'lte';
+  /** Threshold value */
+  threshold?: number;
+  /** Duration the condition must persist (in minutes) */
+  durationMinutes: number;
+}
+
+/**
+ * Notification channel configuration
+ */
+export interface NotificationConfig {
+  /** Channel type */
+  type: 'email' | 'slack' | 'pagerduty' | 'webhook';
+  /** Channel-specific configuration */
+  config: Record<string, string>;
+}
+
+/**
+ * Request for trend export
+ */
+export interface ExportTrendsRequest {
+  /** Trend IDs to export */
+  trendIds: string[];
+  /** Export format */
+  format: 'csv' | 'json' | 'xlsx';
+  /** Include metadata in export */
+  includeMetadata: boolean;
 }
 
 // ============================================================================
@@ -145,326 +171,240 @@ export interface TrendComparisonRequest {
 // ============================================================================
 
 /**
- * Standard API response wrapper
- */
-export interface ApiResponse<T> {
-  /** Response data payload */
-  data: T;
-  
-  /** Response metadata */
-  meta: {
-    /** API version */
-    version: string;
-    
-    /** Request ID for tracing */
-    requestId: string;
-    
-    /** Response timestamp */
-    timestamp: string;
-  };
-}
-
-/**
- * Paginated list response metadata
- */
-export interface PaginationMeta {
-  /** Total number of items available */
-  total: number;
-  
-  /** Number of items in current page */
-  count: number;
-  
-  /** Current offset */
-  offset: number;
-  
-  /** Current limit */
-  limit: number;
-  
-  /** Whether more items are available */
-  hasMore: boolean;
-}
-
-/**
- * Paginated API response
- */
-export interface PaginatedResponse<T> extends ApiResponse<T[]> {
-  meta: ApiResponse<T[]>['meta'] & PaginationMeta;
-}
-
-/**
- * Single trend item in list responses
- */
-export interface TrendListItem {
-  /** Unique identifier */
-  id: string;
-  
-  /** Display name */
-  name: string;
-  
-  /** Current direction */
-  direction: TrendDirection;
-  
-  /** Current severity level */
-  severity: TrendSeverity;
-  
-  /** Last updated timestamp */
-  lastUpdated: string;
-  
-  /** Whether trend is currently active */
-  isActive: boolean;
-  
-  /** Current value (if available) */
-  currentValue?: number;
-  
-  /** Percentage change from baseline */
-  changePercent?: number;
-}
-
-/**
- * Detailed trend information
- */
-export interface TrendDetailResponse {
-  /** Unique identifier */
-  id: string;
-  
-  /** Display name */
-  name: string;
-  
-  /** Description */
-  description: string;
-  
-  /** Associated metric */
-  metric: {
-    id: string;
-    name: string;
-    unit: string;
-  };
-  
-  /** Current status */
-  status: {
-    direction: TrendDirection;
-    severity: TrendSeverity;
-    confidence: number; // 0.0 - 1.0
-    lastCalculated: string;
-  };
-  
-  /** Configuration */
-  config: CreateTrendRequest['config'];
-  
-  /** Alert settings */
-  alerts: CreateTrendRequest['alerts'];
-  
-  /** Created timestamp */
-  createdAt: string;
-  
-  /** Last modified timestamp */
-  updatedAt: string;
-  
-  /** Created by user ID */
-  createdBy: string;
-}
-
-/**
- * Single data point in trend time series
+ * Single trend data point
  */
 export interface TrendDataPoint {
   /** Timestamp for this data point */
   timestamp: string;
-  
-  /** Observed value */
+  /** Metric value */
   value: number;
-  
-  /** Whether this is a forecasted value */
-  isForecast: boolean;
-  
-  /** Confidence interval for forecasts */
-  confidenceInterval?: {
-    lower: number;
-    upper: number;
-  };
-  
-  /** Anomaly score if detected */
-  anomalyScore?: number;
-  
-  /** Associated metadata */
-  metadata?: Record<string, unknown>;
+  /** Optional previous period value for comparison */
+  previousValue?: number;
+  /** Calculated change from previous period */
+  changePercent?: number;
+  /** Trend direction at this point */
+  direction: TrendDirection;
 }
 
 /**
- * Trend data response with time series
+ * Complete trend information
  */
-export interface TrendDataResponse {
-  /** Trend identifier */
-  trendId: string;
-  
-  /** Time series data points */
+export interface Trend {
+  /** Unique trend identifier */
+  id: string;
+  /** Trend name */
+  name: string;
+  /** Metric identifier */
+  metricName: string;
+  /** Trend category */
+  category: TrendCategory;
+  /** Overall trend direction */
+  direction: TrendDirection;
+  /** Data points for the trend */
   dataPoints: TrendDataPoint[];
-  
   /** Summary statistics */
-  statistics: {
-    count: number;
-    mean: number;
-    stdDev: number;
-    min: number;
-    max: number;
-    trendSlope: number;
-  };
-  
-  /** Detected change points */
-  changePoints: Array<{
-    timestamp: string;
-    description: string;
-    significance: number;
-  }>;
+  statistics: TrendStatistics;
+  /** Metadata */
+  metadata: TrendMetadata;
+}
+
+/**
+ * Trend summary statistics
+ */
+export interface TrendStatistics {
+  /** Minimum value in the period */
+  min: number;
+  /** Maximum value in the period */
+  max: number;
+  /** Average value */
+  average: number;
+  /** Total change percentage */
+  totalChangePercent: number;
+  /** Standard deviation */
+  standardDeviation: number;
+}
+
+/**
+ * Trend metadata
+ */
+export interface TrendMetadata {
+  /** Data source */
+  source: string;
+  /** Last updated timestamp */
+  lastUpdated: string;
+  /** Data quality score (0-100) */
+  qualityScore: number;
+  /** Processing status */
+  status: 'complete' | 'partial' | 'failed';
 }
 
 /**
  * Trend comparison result
  */
-export interface TrendComparisonResponse {
-  /** Normalized time series for each trend */
-  series: Array<{
-    trendId: string;
-    trendName: string;
-    color: string;
-    dataPoints: Array<{
-      timestamp: string;
-      normalizedValue: number;
-      originalValue: number;
-    }>;
-  }>;
-  
-  /** Correlation matrix between trends */
-  correlations: Array<{
-    trendIdA: string;
-    trendIdB: string;
-    correlationCoefficient: number; // -1.0 to 1.0
-    lagHours?: number;
-  }>;
-  
-  /** Comparative statistics */
-  statistics: {
-    timeRange: { start: string; end: string };
-    normalizationMethod: string;
-  };
-}
-
-// ============================================================================
-// Error Types
-// ============================================================================
-
-/**
- * Standard API error structure
- */
-export interface ApiError {
-  /** Error code for programmatic handling */
-  code: string;
-  
-  /** Human-readable error message */
-  message: string;
-  
-  /** Additional error details */
-  details?: Record<string, unknown>;
-  
-  /** Field-level validation errors */
-  fieldErrors?: Array<{
-    field: string;
-    message: string;
-    code: string;
-  }>;
+export interface TrendComparison {
+  /** Compared metric name */
+  metricName: string;
+  /** Base period statistics */
+  basePeriod: PeriodStatistics;
+  /** Comparison period statistics */
+  comparisonPeriod: PeriodStatistics;
+  /** Period-over-period change */
+  periodOverPeriodChange: number;
+  /** Statistical significance */
+  isSignificant: boolean;
+  /** Confidence level (0-1) */
+  confidenceLevel: number;
 }
 
 /**
- * API error response
+ * Statistics for a specific period
  */
-export interface ApiErrorResponse {
-  /** Error information */
-  error: ApiError;
-  
-  /** Response metadata */
-  meta: {
-    version: string;
-    requestId: string;
-    timestamp: string;
-  };
+export interface PeriodStatistics {
+  /** Period start */
+  startDate: string;
+  /** Period end */
+  endDate: string;
+  /** Average value */
+  average: number;
+  /** Total/sum value */
+  total: number;
+  /** Sample count */
+  count: number;
+}
+
+/**
+ * Created trend alert response
+ */
+export interface TrendAlert {
+  /** Alert ID */
+  id: string;
+  /** Alert name */
+  name: string;
+  /** Associated metric */
+  metricName: string;
+  /** Alert condition */
+  condition: AlertCondition;
+  /** Current alert status */
+  status: 'active' | 'paused' | 'triggered';
+  /** Creation timestamp */
+  createdAt: string;
+  /** Last modified timestamp */
+  updatedAt: string;
+}
+
+/**
+ * Export job status
+ */
+export interface ExportJobStatus {
+  /** Job ID */
+  jobId: string;
+  /** Current status */
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  /** Progress percentage (0-100) */
+  progress: number;
+  /** Download URL when completed */
+  downloadUrl?: string;
+  /** Error message if failed */
+  errorMessage?: string;
+  /** Estimated completion time */
+  estimatedCompletion?: string;
 }
 
 // ============================================================================
-// Validation Schemas (for runtime validation)
+// Zod Validation Schemas
 // ============================================================================
 
-export const TrendListRequestSchema = z.object({
-  limit: z.number().int().min(1).max(100).optional(),
-  offset: z.number().int().min(0).optional(),
-  metricIds: z.array(z.string().min(1)).optional(),
-  direction: z.nativeEnum(TrendDirection).optional(),
-  minSeverity: z.nativeEnum(TrendSeverity).optional(),
-  startTime: z.string().datetime().optional(),
-  endTime: z.string().datetime().optional(),
-  granularity: z.nativeEnum(TrendGranularity).optional(),
+/**
+ * Validation schema for GetTrendsRequest
+ */
+export const GetTrendsRequestSchema = z.object({
+  startDate: z.string().datetime(),
+  endDate: z.string().datetime(),
+  granularity: z.nativeEnum(TrendGranularity),
+  category: z.nativeEnum(TrendCategory).optional(),
+  metricName: z.string().min(1).max(255).optional(),
 }).refine(
-  (data) => {
-    // Validate that endTime is after startTime if both provided
-    if (data.startTime && data.endTime) {
-      return new Date(data.endTime) > new Date(data.startTime);
-    }
-    return true;
-  },
-  { message: 'endTime must be after startTime', path: ['endTime'] }
+  (data) => new Date(data.startDate) < new Date(data.endDate),
+  { message: 'startDate must be before endDate' }
 );
 
-export const CreateTrendRequestSchema = z.object({
-  name: z.string().min(1).max(200),
-  description: z.string().max(2000).optional(),
-  metricId: z.string().min(1),
-  config: z.object({
-    algorithm: z.enum(['linear_regression', 'moving_average', 'anomaly_detection']),
-    sensitivity: z.number().min(0).max(1),
-    minDataPoints: z.number().int().min(2),
-    lookbackHours: z.number().int().min(1).max(8760), // Max 1 year
+/**
+ * Validation schema for CreateTrendAlertRequest
+ */
+export const CreateTrendAlertRequestSchema = z.object({
+  name: z.string().min(1).max(100),
+  metricName: z.string().min(1).max(255),
+  condition: z.object({
+    type: z.enum(['threshold', 'anomaly', 'trend_change']),
+    operator: z.enum(['gt', 'lt', 'eq', 'gte', 'lte']).optional(),
+    threshold: z.number().optional(),
+    durationMinutes: z.number().int().positive().max(10080), // Max 1 week
   }),
-  alerts: z.object({
-    enabled: z.boolean(),
-    triggerOn: z.array(z.nativeEnum(TrendSeverity)).min(1),
-    channelIds: z.array(z.string().min(1)).min(1),
-  }).optional(),
+  notifications: z.array(z.object({
+    type: z.enum(['email', 'slack', 'pagerduty', 'webhook']),
+    config: z.record(z.string()),
+  })).min(1).max(10),
+  category: z.nativeEnum(TrendCategory).optional(),
 });
 
-export const TrendDataRequestSchema = z.object({
-  trendId: z.string().min(1),
-  startTime: z.string().datetime(),
-  endTime: z.string().datetime(),
+/**
+ * Validation schema for CompareTrendsRequest
+ */
+export const CompareTrendsRequestSchema = z.object({
+  basePeriod: z.object({
+    startDate: z.string().datetime(),
+    endDate: z.string().datetime(),
+  }),
+  comparisonPeriod: z.object({
+    startDate: z.string().datetime(),
+    endDate: z.string().datetime(),
+  }),
+  metrics: z.array(z.string().min(1)).min(1).max(10),
   granularity: z.nativeEnum(TrendGranularity),
-  includeForecast: z.boolean().optional(),
-  forecastHorizon: z.number().int().min(1).max(100).optional(),
-}).refine(
-  (data) => new Date(data.endTime) > new Date(data.startTime),
-  { message: 'endTime must be after startTime', path: ['endTime'] }
-);
+});
 
 // ============================================================================
 // Type Guards
 // ============================================================================
 
 /**
- * Type guard to check if response is an error
+ * Type guard to check if a response is a successful Trends API response
  */
-export function isApiErrorResponse(response: unknown): response is ApiErrorResponse {
+export function isSuccessfulTrendsResponse<T>(
+  response: unknown
+): response is TrendsApiResponse<T> {
   return (
     typeof response === 'object' &&
     response !== null &&
-    'error' in response &&
-    typeof (response as ApiErrorResponse).error === 'object' &&
-    'code' in (response as ApiErrorResponse).error
+    'status' in response &&
+    (response as TrendsApiResponse<T>).status === 'success' &&
+    'data' in response &&
+    'timestamp' in response &&
+    'correlationId' in response
   );
 }
 
 /**
- * Type guard to check if response is paginated
+ * Type guard to check if response contains pagination
  */
-export function isPaginatedResponse<T>(response: ApiResponse<T[]>): response is PaginatedResponse<T> {
+export function hasPagination<T>(
+  response: TrendsApiResponse<T>
+): response is TrendsApiResponse<T> & { pagination: PaginationMetadata } {
+  return response.pagination !== undefined;
+}
+
+/**
+ * Type guard to check if a value is a valid TrendDataPoint
+ */
+export function isTrendDataPoint(value: unknown): value is TrendDataPoint {
   return (
-    'total' in response.meta &&
-    'hasMore' in response.meta
+    typeof value === 'object' &&
+    value !== null &&
+    'timestamp' in value &&
+    'value' in value &&
+    'direction' in value &&
+    typeof (value as TrendDataPoint).timestamp === 'string' &&
+    typeof (value as TrendDataPoint).value === 'number' &&
+    Object.values(TrendDirection).includes((value as TrendDataPoint).direction)
   );
 }

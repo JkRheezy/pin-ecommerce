@@ -14,27 +14,7 @@ export * from '../types/trends/index';
 // This file is kept as a shim for backwards compatibility.
 // It will be removed in version 3.0.0.
 // Migration guide: https://docs.harness-engineering.io/migrations/trends-types
-WEEKLY = 'weekly',
-  MONTHLY = 'monthly',
-}
-
-/**
- * Represents the aggregation method for trend data.
- * Determines how multiple data points are combined within a time window.
- */
-export enum TrendAggregation {
-  SUM = 'sum',
-  AVERAGE = 'average',
-  MIN = 'min',
-  MAX = 'max',
-  COUNT = 'count',
-  LAST = 'last',
-  FIRST = 'first',
-}
-
-/**
- * Represents the status of a trend data point.
- * Used to indicate data quality and availability.
+// @deprecated - Import from 'src/types/trends/index' instead to indicate data quality and availability.
  */
 export enum TrendPointStatus {
   VALID = 'valid',

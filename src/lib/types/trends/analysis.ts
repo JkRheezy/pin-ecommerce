@@ -1,462 +1,375 @@
 /**
  * @fileoverview Trend Analysis Types
- * @module lib/types/trends/analysis
- *
- * Defines the type definitions for trend analysis functionality.
- * These types support the six-layer architecture by providing
- * strongly-typed contracts for trend computation, storage, and presentation.
+ * @description Type definitions for trend analysis functionality in the Harness-Engineering environment.
+ * @module types/trends/analysis
  */
 
 import { z } from 'zod';
+import { Result, Option } from '../common/result';
+import { TimeRange, TimeGranularity } from '../common/time';
 
-// ============================================================================
-// Enums & Constants
-// ============================================================================
+// =============================================================================
+// Domain Types
+// =============================================================================
 
 /**
- * Supported time granularities for trend analysis
+ * Represents the statistical trend direction
  */
-export enum TrendGranularity {
-  HOURLY = 'hourly',
-  DAILY = 'daily',
-  WEEKLY = 'weekly',
-  MONTHLY = 'monthly',
-  QUARTERLY = 'quarterly',
+export enum TrendDirection {
+  UP = 'UP',
+  DOWN = 'DOWN',
+  FLAT = 'FLAT',
+  VOLATILE = 'VOLATILE',
+  UNKNOWN = 'UNKNOWN',
 }
 
 /**
- * Types of trend patterns that can be detected
+ * Confidence level for trend predictions
  */
-export enum TrendPatternType {
-  INCREASING = 'increasing',
-  DECREASING = 'decreasing',
-  STABLE = 'stable',
-  VOLATILE = 'volatile',
-  SEASONAL = 'seasonal',
-  CYCLICAL = 'cyclical',
-  SPIKE = 'spike',
-  DROP = 'drop',
+export enum ConfidenceLevel {
+  HIGH = 'HIGH',      // > 90%
+  MEDIUM = 'MEDIUM',  // 70-90%
+  LOW = 'LOW',        // 50-70%
+  UNCERTAIN = 'UNCERTAIN', // < 50%
 }
 
 /**
- * Severity levels for trend anomalies
+ * Types of trends that can be analyzed
  */
-export enum AnomalySeverity {
-  INFO = 'info',
-  WARNING = 'warning',
-  CRITICAL = 'critical',
+export enum TrendType {
+  LINEAR = 'LINEAR',
+  EXPONENTIAL = 'EXPONENTIAL',
+  LOGARITHMIC = 'LOGARITHMIC',
+  SEASONAL = 'SEASONAL',
+  CYCLICAL = 'CYCLICAL',
+  STEP = 'STEP',
+  CUSTOM = 'CUSTOM',
 }
 
-// ============================================================================
-// Core Data Types
-// ============================================================================
-
-/**
- * Configuration for trend analysis operations
- */
-export interface TrendAnalysisConfig {
-  /** Time granularity for data aggregation */
-  granularity: TrendGranularity;
-
-  /** Number of periods to analyze */
-  lookbackPeriods: number;
-
-  /** Minimum data points required for valid analysis */
-  minDataPoints: number;
-
-  /** Confidence threshold for pattern detection (0-1) */
-  confidenceThreshold: number;
-
-  /** Whether to detect anomalies */
-  detectAnomalies: boolean;
-
-  /** Anomaly detection sensitivity (standard deviations) */
-  anomalySensitivity: number;
-
-  /** Whether to enable seasonal decomposition */
-  enableSeasonality: boolean;
-
-  /** Seasonal period length (in granularity units) */
-  seasonalPeriod?: number;
-}
+// =============================================================================
+// Core Data Structures
+// =============================================================================
 
 /**
  * A single data point in a time series
  */
-export interface DataPoint<T = number> {
-  /** Timestamp of the data point */
-  timestamp: Date;
-
-  /** The measured value */
-  value: T;
-
-  /** Optional metadata associated with this point */
-  metadata?: Record<string, unknown>;
+export interface DataPoint {
+  readonly timestamp: Date;
+  readonly value: number;
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 /**
- * Represents a time series dataset for analysis
+ * A collection of data points forming a time series
  */
-export interface TimeSeries<T = number> {
-  /** Unique identifier for this series */
-  id: string;
-
-  /** Human-readable name */
-  name: string;
-
-  /** The data points in chronological order */
-  points: DataPoint<T>[];
-
-  /** Unit of measurement (e.g., 'ms', 'count', 'percentage') */
-  unit?: string;
-
-  /** Additional context for this series */
-  tags?: Record<string, string>;
-}
-
-// ============================================================================
-// Analysis Result Types
-// ============================================================================
-
-/**
- * Statistical summary of a time series
- */
-export interface TrendStatistics {
-  /** Number of data points */
-  count: number;
-
-  /** Mean value */
-  mean: number;
-
-  /** Median value */
-  median: number;
-
-  /** Standard deviation */
-  stdDev: number;
-
-  /** Minimum value */
-  min: number;
-
-  /** Maximum value */
-  max: number;
-
-  /** Sum of all values */
-  sum: number;
-
-  /** Coefficient of variation (stdDev / mean) */
-  coefficientOfVariation: number;
-
-  /** First quartile (25th percentile) */
-  q1: number;
-
-  /** Third quartile (75th percentile) */
-  q3: number;
-
-  /** Interquartile range */
-  iqr: number;
+export interface TimeSeries {
+  readonly id: string;
+  readonly name: string;
+  readonly dataPoints: ReadonlyArray<DataPoint>;
+  readonly granularity: TimeGranularity;
+  readonly tags: ReadonlyArray<string>;
 }
 
 /**
- * Detected trend pattern with metadata
+ * Statistical measures for a time series
  */
-export interface TrendPattern {
-  /** Type of pattern detected */
-  type: TrendPatternType;
+export interface StatisticalSummary {
+  readonly count: number;
+  readonly mean: number;
+  readonly median: number;
+  readonly mode: Option<number>;
+  readonly standardDeviation: number;
+  readonly variance: number;
+  readonly min: number;
+  readonly max: number;
+  readonly range: number;
+  readonly quartiles: {
+    readonly q1: number;
+    readonly q2: number;
+    readonly q3: number;
+  };
+  readonly skewness: number;
+  readonly kurtosis: number;
+}
 
-  /** Confidence score (0-1) */
-  confidence: number;
+// =============================================================================
+// Trend Analysis Results
+// =============================================================================
 
-  /** Start timestamp of the pattern */
-  startTime: Date;
-
-  /** End timestamp of the pattern */
-  endTime: Date;
-
-  /** Slope/magnitude of the trend (if applicable) */
-  slope?: number;
-
-  /** Human-readable description */
-  description: string;
-
-  /** Supporting evidence for this pattern */
-  evidence: PatternEvidence[];
+/**
+ * Result of fitting a trend line to data
+ */
+export interface TrendFit {
+  readonly type: TrendType;
+  readonly parameters: Readonly<Record<string, number>>;
+  readonly rSquared: number;           // Coefficient of determination (0-1)
+  readonly adjustedRSquared: number;   // Adjusted for number of predictors
+  readonly rmse: number;               // Root mean square error
+  readonly mae: number;                // Mean absolute error
+  readonly equation: string;           // Human-readable equation
 }
 
 /**
- * Evidence supporting a pattern detection
+ * A detected trend segment within a time series
  */
-export interface PatternEvidence {
-  /** Type of evidence */
-  type: 'statistical' | 'visual' | 'algorithmic';
-
-  /** Description of the evidence */
-  description: string;
-
-  /** Quantitative measure of evidence strength */
-  score: number;
+export interface TrendSegment {
+  readonly id: string;
+  readonly startIndex: number;
+  readonly endIndex: number;
+  readonly startTime: Date;
+  readonly endTime: Date;
+  readonly direction: TrendDirection;
+  readonly magnitude: number;          // Absolute change in value
+  readonly percentChange: number;      // Percentage change
+  readonly duration: number;           // Duration in milliseconds
+  readonly fit: TrendFit;
+  readonly confidence: ConfidenceLevel;
 }
 
 /**
- * Detected anomaly in the time series
+ * Seasonal decomposition components
  */
-export interface TrendAnomaly {
-  /** Unique identifier */
-  id: string;
+export interface SeasonalDecomposition {
+  readonly trend: ReadonlyArray<number>;
+  readonly seasonal: ReadonlyArray<number>;
+  readonly residual: ReadonlyArray<number>;
+  readonly seasonalPeriod: number;     // Period length in data points
+  readonly seasonalStrength: number;   // 0-1, higher means stronger seasonality
+}
 
-  /** Timestamp when anomaly occurred */
-  timestamp: Date;
-
-  /** Expected value based on trend */
-  expectedValue: number;
-
-  /** Actual observed value */
-  actualValue: number;
-
-  /** Deviation from expected (actual - expected) */
-  deviation: number;
-
-  /** Deviation as percentage of expected value */
-  deviationPercent: number;
-
-  /** Severity classification */
-  severity: AnomalySeverity;
-
-  /** Type of anomaly pattern */
-  type: 'spike' | 'drop' | 'shift' | 'trend_change';
-
-  /** Human-readable explanation */
-  explanation: string;
+/**
+ * Anomaly detection result
+ */
+export interface Anomaly {
+  readonly index: number;
+  readonly timestamp: Date;
+  readonly expectedValue: number;
+  readonly actualValue: number;
+  readonly deviation: number;          // Standard deviations from expected
+  readonly severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  readonly type: 'SPIKE' | 'DROP' | 'TREND_BREAK' | 'PATTERN_CHANGE';
+  readonly explanation?: string;
 }
 
 /**
  * Complete trend analysis result
  */
-export interface TrendAnalysisResult {
-  /** Unique identifier for this analysis */
-  id: string;
+export interface TrendAnalysis {
+  readonly id: string;
+  readonly timeSeriesId: string;
+  readonly timeRange: TimeRange;
+  readonly createdAt: Date;
+  readonly statisticalSummary: StatisticalSummary;
+  readonly overallDirection: TrendDirection;
+  readonly segments: ReadonlyArray<TrendSegment>;
+  readonly bestFit: TrendFit;
+  readonly seasonalDecomposition: Option<SeasonalDecomposition>;
+  readonly anomalies: ReadonlyArray<Anomaly>;
+  readonly changePoints: ReadonlyArray<number>; // Indices where significant changes occur
+  readonly forecast?: TrendForecast;
+}
 
-  /** When the analysis was performed */
-  analyzedAt: Date;
+// =============================================================================
+// Forecasting Types
+// =============================================================================
 
-  /** Configuration used for analysis */
-  config: TrendAnalysisConfig;
-
-  /** Source time series information */
-  source: {
-    seriesId: string;
-    seriesName: string;
-    pointCount: number;
-    timeRange: {
-      start: Date;
-      end: Date;
-    };
+/**
+ * A single forecasted data point
+ */
+export interface ForecastPoint {
+  readonly timestamp: Date;
+  readonly predictedValue: number;
+  readonly confidenceInterval: {
+    readonly lower: number;
+    readonly upper: number;
+    readonly confidence: number;       // e.g., 0.95 for 95% CI
   };
-
-  /** Statistical summary */
-  statistics: TrendStatistics;
-
-  /** Detected patterns */
-  patterns: TrendPattern[];
-
-  /** Detected anomalies */
-  anomalies: TrendAnomaly[];
-
-  /** Forecasted values (if forecasting was enabled) */
-  forecast?: TrendForecast;
-
-  /** Overall trend direction assessment */
-  overallDirection: 'up' | 'down' | 'stable' | 'mixed';
-
-  /** Key insights extracted from analysis */
-  insights: TrendInsight[];
+  readonly components?: {
+    readonly trend: number;
+    readonly seasonal: number;
+    readonly residual: number;
+  };
 }
 
 /**
- * Forecast result from trend analysis
+ * Complete forecast result
  */
 export interface TrendForecast {
-  /** Forecasted data points */
-  points: DataPoint<number>[];
-
-  /** Confidence intervals for each forecast point */
-  confidenceIntervals: Array<{
-    timestamp: Date;
-    lower: number;
-    upper: number;
-    confidence: number;
-  }>;
-
-  /** Forecast accuracy metrics on historical validation */
-  accuracyMetrics?: {
-    mae: number; // Mean Absolute Error
-    rmse: number; // Root Mean Square Error
-    mape: number; // Mean Absolute Percentage Error
+  readonly id: string;
+  readonly analysisId: string;
+  readonly horizon: number;            // Number of periods forecasted
+  readonly granularity: TimeGranularity;
+  readonly points: ReadonlyArray<ForecastPoint>;
+  readonly model: TrendType;
+  readonly accuracy: {
+    readonly mape: number;             // Mean absolute percentage error
+    readonly smape: number;            // Symmetric MAPE
+    readonly mase: number;             // Mean absolute scaled error
   };
+  readonly warnings: ReadonlyArray<string>;
 }
 
+// =============================================================================
+// Configuration Types
+// =============================================================================
+
 /**
- * Human-readable insight from trend analysis
+ * Configuration for trend analysis algorithms
  */
-export interface TrendInsight {
-  /** Insight category */
-  category: 'performance' | 'reliability' | 'growth' | 'anomaly' | 'general';
-
-  /** Insight priority */
-  priority: 'low' | 'medium' | 'high';
-
-  /** Concise insight message */
-  message: string;
-
-  /** Detailed explanation */
-  details?: string;
-
-  /** Recommended action (if any) */
-  recommendation?: string;
-
-  /** Related metrics or data points */
-  relatedMetrics?: Array<{
-    name: string;
-    value: number;
-    unit?: string;
-  }>;
+export interface TrendAnalysisConfig {
+  readonly minDataPoints: number;      // Minimum required for analysis
+  readonly maxSegments: number;        // Maximum trend segments to detect
+  readonly segmentMinLength: number;   // Minimum points per segment
+  readonly outlierThreshold: number;   // Z-score threshold for outliers
+  readonly seasonalPeriod?: number;    // Expected seasonal period (auto-detect if undefined)
+  readonly confidenceLevel: number;    // For confidence intervals (e.g., 0.95)
+  readonly enableAnomalyDetection: boolean;
+  readonly enableSeasonalDecomposition: boolean;
+  readonly enableForecasting: boolean;
+  readonly forecastHorizon: number;    // Number of periods to forecast
 }
 
-// ============================================================================
+/**
+ * Default configuration values
+ */
+export const DEFAULT_TREND_ANALYSIS_CONFIG: TrendAnalysisConfig = {
+  minDataPoints: 10,
+  maxSegments: 5,
+  segmentMinLength: 5,
+  outlierThreshold: 3,
+  confidenceLevel: 0.95,
+  enableAnomalyDetection: true,
+  enableSeasonalDecomposition: true,
+  enableForecasting: true,
+  forecastHorizon: 10,
+} as const;
+
+// =============================================================================
 // Error Types
-// ============================================================================
+// =============================================================================
 
 /**
- * Error codes specific to trend analysis operations
+ * Error codes specific to trend analysis
  */
 export enum TrendAnalysisErrorCode {
   INSUFFICIENT_DATA = 'INSUFFICIENT_DATA',
-  INVALID_GRANULARITY = 'INVALID_GRANULARITY',
   INVALID_TIME_RANGE = 'INVALID_TIME_RANGE',
   COMPUTATION_FAILED = 'COMPUTATION_FAILED',
-  CONFIGURATION_ERROR = 'CONFIGURATION_ERROR',
-  SEASONALITY_DETECTION_FAILED = 'SEASONALITY_DETECTION_FAILED',
+  INVALID_CONFIG = 'INVALID_CONFIG',
+  FORECAST_FAILED = 'FORECAST_FAILED',
+  SEASONAL_DECOMPOSITION_FAILED = 'SEASONAL_DECOMPOSITION_FAILED',
 }
 
 /**
- * Custom error class for trend analysis failures
+ * Structured error for trend analysis failures
  */
-export class TrendAnalysisError extends Error {
-  constructor(
-    public readonly code: TrendAnalysisErrorCode,
-    message: string,
-    public readonly context?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'TrendAnalysisError';
-    Object.setPrototypeOf(this, TrendAnalysisError.prototype);
-  }
-
-  toJSON(): Record<string, unknown> {
-    return {
-      name: this.name,
-      code: this.code,
-      message: this.message,
-      context: this.context,
-    };
-  }
+export interface TrendAnalysisError {
+  readonly code: TrendAnalysisErrorCode;
+  readonly message: string;
+  readonly context?: Record<string, unknown>;
+  readonly recoverable: boolean;
 }
 
-// ============================================================================
+/**
+ * Result type for trend analysis operations
+ */
+export type TrendAnalysisResult<T> = Result<T, TrendAnalysisError>;
+
+// =============================================================================
 // Zod Schemas for Runtime Validation
-// ============================================================================
+// =============================================================================
 
-/**
- * Zod schema for TrendGranularity enum validation
- */
-export const TrendGranularitySchema = z.nativeEnum(TrendGranularity);
-
-/**
- * Zod schema for TrendPatternType enum validation
- */
-export const TrendPatternTypeSchema = z.nativeEnum(TrendPatternType);
-
-/**
- * Zod schema for AnomalySeverity enum validation
- */
-export const AnomalySeveritySchema = z.nativeEnum(AnomalySeverity);
-
-/**
- * Zod schema for DataPoint validation
- */
 export const DataPointSchema = z.object({
   timestamp: z.date(),
-  value: z.number(),
+  value: z.number().finite(),
   metadata: z.record(z.unknown()).optional(),
 });
 
-/**
- * Zod schema for TrendAnalysisConfig validation
- */
-export const TrendAnalysisConfigSchema = z.object({
-  granularity: TrendGranularitySchema,
-  lookbackPeriods: z.number().int().positive(),
-  minDataPoints: z.number().int().positive(),
-  confidenceThreshold: z.number().min(0).max(1),
-  detectAnomalies: z.boolean(),
-  anomalySensitivity: z.number().positive(),
-  enableSeasonality: z.boolean(),
-  seasonalPeriod: z.number().int().positive().optional(),
-});
-
-/**
- * Zod schema for TimeSeries validation
- */
 export const TimeSeriesSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
-  points: z.array(DataPointSchema).min(1),
-  unit: z.string().optional(),
-  tags: z.record(z.string()).optional(),
+  dataPoints: z.array(DataPointSchema).min(1),
+  granularity: z.nativeEnum(TimeGranularity),
+  tags: z.array(z.string()),
 });
 
-// ============================================================================
-// Utility Types
-// ============================================================================
+export const StatisticalSummarySchema = z.object({
+  count: z.number().int().nonnegative(),
+  mean: z.number().finite(),
+  median: z.number().finite(),
+  mode: z.number().finite().nullable(),
+  standardDeviation: z.number().finite().nonnegative(),
+  variance: z.number().finite().nonnegative(),
+  min: z.number().finite(),
+  max: z.number().finite(),
+  range: z.number().finite().nonnegative(),
+  quartiles: z.object({
+    q1: z.number().finite(),
+    q2: z.number().finite(),
+    q3: z.number().finite(),
+  }),
+  skewness: z.number().finite(),
+  kurtosis: z.number().finite(),
+});
+
+export const TrendFitSchema = z.object({
+  type: z.nativeEnum(TrendType),
+  parameters: z.record(z.number().finite()),
+  rSquared: z.number().min(0).max(1),
+  adjustedRSquared: z.number().min(-Infinity).max(1),
+  rmse: z.number().finite().nonnegative(),
+  mae: z.number().finite().nonnegative(),
+  equation: z.string().min(1),
+});
+
+export const TrendAnalysisConfigSchema = z.object({
+  minDataPoints: z.number().int().positive().default(10),
+  maxSegments: z.number().int().positive().default(5),
+  segmentMinLength: z.number().int().positive().default(5),
+  outlierThreshold: z.number().positive().default(3),
+  seasonalPeriod: z.number().int().positive().optional(),
+  confidenceLevel: z.number().min(0).max(1).default(0.95),
+  enableAnomalyDetection: z.boolean().default(true),
+  enableSeasonalDecomposition: z.boolean().default(true),
+  enableForecasting: z.boolean().default(true),
+  forecastHorizon: z.number().int().nonnegative().default(10),
+});
+
+// =============================================================================
+// Type Guards
+// =============================================================================
 
 /**
- * Type for trend analysis operation results (success or error)
+ * Type guard for TrendDirection
  */
-export type TrendAnalysisOperationResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: TrendAnalysisError };
-
-/**
- * Options for comparing multiple time series
- */
-export interface SeriesComparisonOptions {
-  /** Method for aligning series with different timestamps */
-  alignmentMethod: 'interpolate' | 'nearest' | 'exact';
-
-  /** Whether to normalize values to common scale */
-  normalize: boolean;
-
-  /** Correlation method to use */
-  correlationMethod: 'pearson' | 'spearman' | 'kendall';
+export function isTrendDirection(value: unknown): value is TrendDirection {
+  return Object.values(TrendDirection).includes(value as TrendDirection);
 }
 
 /**
- * Result of comparing multiple time series
+ * Type guard for ConfidenceLevel
  */
-export interface SeriesComparisonResult {
-  /** Pairwise correlation coefficients */
-  correlations: Array<{
-    seriesA: string;
-    seriesB: string;
-    coefficient: number;
-    significance: number;
-  }>;
+export function isConfidenceLevel(value: unknown): value is ConfidenceLevel {
+  return Object.values(ConfidenceLevel).includes(value as ConfidenceLevel);
+}
 
-  /** Overall similarity score (0-1) */
-  overallSimilarity: number;
+/**
+ * Type guard for TrendType
+ */
+export function isTrendType(value: unknown): value is TrendType {
+  return Object.values(TrendType).includes(value as TrendType);
+}
 
-  /** Lag analysis (if series are shifted) */
-  lagAnalysis?: {
-    optimalLag: number;
-    lagCorrelation: number;
-  };
+/**
+ * Validates if a value is a valid DataPoint
+ */
+export function isValidDataPoint(value: unknown): value is DataPoint {
+  return DataPointSchema.safeParse(value).success;
+}
+
+/**
+ * Validates if a value is a valid TimeSeries
+ */
+export function isValidTimeSeries(value: unknown): value is TimeSeries {
+  return TimeSeriesSchema.safeParse(value).success;
 }

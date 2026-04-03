@@ -1,38 +1,28 @@
 /**
- * Trends Core Types and Enums
- * 
- * This module defines the foundational types for the trends feature.
- * Located at: Types layer (Layer 1) of the six-layer architecture.
+ * @file src/lib/types/trends/core.ts
+ * @description Base types and enums for the trends module following the six-layer architecture.
+ * This file resides in the Types layer and defines foundational data structures.
  */
 
 import { z } from 'zod';
 
-// ============================================================================
+// =============================================================================
 // Enums
-// ============================================================================
+// =============================================================================
 
 /**
- * Trend direction indicates whether a metric is increasing, decreasing,
- * or stable over the observed time period.
+ * Represents the possible states of a trend analysis job.
  */
-export enum TrendDirection {
-  UP = 'UP',
-  DOWN = 'DOWN',
-  FLAT = 'FLAT',
+export enum TrendJobStatus {
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
 }
 
 /**
- * Trend severity levels for alerting and prioritization.
- */
-export enum TrendSeverity {
-  CRITICAL = 'CRITICAL',
-  WARNING = 'WARNING',
-  INFO = 'INFO',
-  NONE = 'NONE',
-}
-
-/**
- * Supported time granularities for trend analysis.
+ * Defines the granularity levels for trend data aggregation.
  */
 export enum TrendGranularity {
   MINUTE = 'MINUTE',
@@ -43,190 +33,324 @@ export enum TrendGranularity {
 }
 
 /**
- * Types of trend analysis algorithms available.
+ * Categorizes the type of trend being analyzed.
  */
-export enum TrendAlgorithm {
-  LINEAR_REGRESSION = 'LINEAR_REGRESSION',
-  MOVING_AVERAGE = 'MOVING_AVERAGE',
-  EXPONENTIAL_SMOOTHING = 'EXPONENTIAL_SMOOTHING',
-  SEASONAL_DECOMPOSITION = 'SEASONAL_DECOMPOSITION',
+export enum TrendType {
+  PERFORMANCE = 'PERFORMANCE',
+  RELIABILITY = 'RELIABILITY',
+  SECURITY = 'SECURITY',
+  COST = 'COST',
+  DEPLOYMENT = 'DEPLOYMENT',
 }
 
-// ============================================================================
-// Zod Schemas for Runtime Validation
-// ============================================================================
+/**
+ * Indicates the direction of a trend change.
+ */
+export enum TrendDirection {
+  IMPROVING = 'IMPROVING',
+  DEGRADING = 'DEGRADING',
+  STABLE = 'STABLE',
+  VOLATILE = 'VOLATILE',
+}
 
-export const trendDirectionSchema = z.nativeEnum(TrendDirection);
-export const trendSeveritySchema = z.nativeEnum(TrendSeverity);
-export const trendGranularitySchema = z.nativeEnum(TrendGranularity);
-export const trendAlgorithmSchema = z.nativeEnum(TrendAlgorithm);
+// =============================================================================
+// Base Types
+// =============================================================================
 
 /**
- * Schema for validating trend data points.
+ * Unique identifier for trend-related entities.
+ * Uses branded type pattern for type safety.
  */
-export const trendDataPointSchema = z.object({
-  timestamp: z.date().or(z.string().datetime()),
+export type TrendId = string & { __brand: 'TrendId' };
+
+/**
+ * Timestamp in ISO 8601 format.
+ */
+export type ISOTimestamp = string & { __brand: 'ISOTimestamp' };
+
+/**
+ * Validation schema for TrendId.
+ */
+export const TrendIdSchema = z
+  .string()
+  .uuid()
+  .transform((val) => val as TrendId);
+
+/**
+ * Validation schema for ISOTimestamp.
+ */
+export const ISOTimestampSchema = z
+  .string()
+  .datetime()
+  .transform((val) => val as ISOTimestamp);
+
+// =============================================================================
+// Core Data Structures
+// =============================================================================
+
+/**
+ * Represents a single data point in a trend series.
+ */
+export interface TrendDataPoint {
+  /** Unique identifier for this data point */
+  readonly id: TrendId;
+
+  /** Timestamp when this data point was recorded */
+  readonly timestamp: ISOTimestamp;
+
+  /** The metric value at this point in time */
+  readonly value: number;
+
+  /** Optional metadata associated with this data point */
+  readonly metadata?: Record<string, unknown>;
+}
+
+/**
+ * Validation schema for TrendDataPoint.
+ */
+export const TrendDataPointSchema = z.object({
+  id: TrendIdSchema,
+  timestamp: ISOTimestampSchema,
   value: z.number().finite(),
   metadata: z.record(z.unknown()).optional(),
 });
 
 /**
- * Schema for trend configuration options.
+ * Represents a complete trend series with metadata.
  */
-export const trendConfigSchema = z.object({
-  algorithm: trendAlgorithmSchema,
-  granularity: trendGranularitySchema,
-  windowSize: z.number().int().positive().max(365),
-  thresholdCritical: z.number().optional(),
-  thresholdWarning: z.number().optional(),
+export interface TrendSeries {
+  /** Unique identifier for this trend series */
+  readonly id: TrendId;
+
+  /** Human-readable name of the trend */
+  readonly name: string;
+
+  /** Type of trend being tracked */
+  readonly type: TrendType;
+
+  /** Granularity of the data points */
+  readonly granularity: TrendGranularity;
+
+  /** Ordered array of data points (oldest to newest) */
+  readonly dataPoints: readonly TrendDataPoint[];
+
+  /** When this series was created */
+  readonly createdAt: ISOTimestamp;
+
+  /** When this series was last updated */
+  readonly updatedAt: ISOTimestamp;
+}
+
+/**
+ * Validation schema for TrendSeries.
+ */
+export const TrendSeriesSchema = z.object({
+  id: TrendIdSchema,
+  name: z.string().min(1).max(256),
+  type: z.nativeEnum(TrendType),
+  granularity: z.nativeEnum(TrendGranularity),
+  dataPoints: z.array(TrendDataPointSchema).min(1),
+  createdAt: ISOTimestampSchema,
+  updatedAt: ISOTimestampSchema,
 });
 
-// ============================================================================
-// Core Types
-// ============================================================================
-
 /**
- * A single data point in a time series for trend analysis.
+ * Represents the result of a trend analysis operation.
  */
-export interface TrendDataPoint {
-  /** ISO 8601 timestamp or Date object */
-  timestamp: Date | string;
-  /** The measured value at this point in time */
-  value: number;
-  /** Optional contextual metadata */
-  metadata?: Record<string, unknown>;
+export interface TrendAnalysisResult {
+  /** The analyzed trend series */
+  readonly series: TrendSeries;
+
+  /** Calculated direction of the trend */
+  readonly direction: TrendDirection;
+
+  /** Percentage change from first to last data point */
+  readonly percentChange: number;
+
+  /** Statistical confidence score (0-1) */
+  readonly confidenceScore: number;
+
+  /** Detected anomalies in the series */
+  readonly anomalies: readonly TrendAnomaly[];
+
+  /** Optional recommendation based on analysis */
+  readonly recommendation?: string;
 }
 
 /**
- * Configuration options for trend analysis.
+ * Validation schema for TrendAnalysisResult.
  */
-export interface TrendConfig {
-  /** The algorithm to use for trend calculation */
-  algorithm: TrendAlgorithm;
-  /** Time granularity for bucketing data points */
-  granularity: TrendGranularity;
-  /** Number of time units to include in the analysis window */
-  windowSize: number;
-  /** Optional threshold for critical severity alerts */
-  thresholdCritical?: number;
-  /** Optional threshold for warning severity alerts */
-  thresholdWarning?: number;
+export const TrendAnalysisResultSchema = z.object({
+  series: TrendSeriesSchema,
+  direction: z.nativeEnum(TrendDirection),
+  percentChange: z.number().finite(),
+  confidenceScore: z.number().min(0).max(1),
+  anomalies: z.array(z.lazy(() => TrendAnomalySchema)),
+  recommendation: z.string().optional(),
+});
+
+/**
+ * Represents an anomaly detected in a trend series.
+ */
+export interface TrendAnomaly {
+  /** Data point where anomaly was detected */
+  readonly dataPoint: TrendDataPoint;
+
+  /** Type of anomaly (spike, drop, pattern break) */
+  readonly type: 'SPIKE' | 'DROP' | 'PATTERN_BREAK';
+
+  /** Severity score of the anomaly (0-1) */
+  readonly severity: number;
+
+  /** Human-readable description of the anomaly */
+  readonly description: string;
 }
 
 /**
- * Result of a trend analysis calculation.
+ * Validation schema for TrendAnomaly.
  */
-export interface TrendResult {
-  /** The calculated direction of the trend */
-  direction: TrendDirection;
-  /** Severity assessment based on thresholds */
-  severity: TrendSeverity;
-  /** Slope coefficient (rate of change per time unit) */
-  slope: number;
-  /** R-squared value indicating fit quality (0-1) */
-  confidence: number;
-  /** Human-readable description of the trend */
-  description: string;
-  /** The configuration used for this analysis */
-  config: TrendConfig;
-  /** When the analysis was performed */
-  analyzedAt: Date;
+export const TrendAnomalySchema = z.object({
+  dataPoint: TrendDataPointSchema,
+  type: z.enum(['SPIKE', 'DROP', 'PATTERN_BREAK']),
+  severity: z.number().min(0).max(1),
+  description: z.string().min(1),
+});
+
+// =============================================================================
+// Configuration Types
+// =============================================================================
+
+/**
+ * Configuration options for trend analysis operations.
+ * Passed through Config layer to Service layer.
+ */
+export interface TrendAnalysisConfig {
+  /** Minimum number of data points required for analysis */
+  readonly minDataPoints: number;
+
+  /** Maximum age of data to consider (in days) */
+  readonly maxDataAgeDays: number;
+
+  /** Threshold for anomaly detection (standard deviations) */
+  readonly anomalyThreshold: number;
+
+  /** Whether to include seasonal adjustments */
+  readonly enableSeasonalAdjustment: boolean;
+
+  /** Confidence level for statistical tests */
+  readonly confidenceLevel: number;
 }
 
 /**
- * Error types specific to trend operations.
+ * Validation schema for TrendAnalysisConfig with sensible defaults.
  */
-export enum TrendErrorCode {
-  INVALID_DATA = 'INVALID_DATA',
-  INSUFFICIENT_DATA = 'INSUFFICIENT_DATA',
-  CALCULATION_ERROR = 'CALCULATION_ERROR',
-  CONFIGURATION_ERROR = 'CONFIGURATION_ERROR',
-  TIMEOUT = 'TIMEOUT',
-}
+export const TrendAnalysisConfigSchema = z.object({
+  minDataPoints: z.number().int().min(2).default(10),
+  maxDataAgeDays: z.number().int().min(1).default(90),
+  anomalyThreshold: z.number().positive().default(2.5),
+  enableSeasonalAdjustment: z.boolean().default(false),
+  confidenceLevel: z.number().min(0.5).max(0.99).default(0.95),
+});
+
+// =============================================================================
+// Error Types
+// =============================================================================
 
 /**
- * Custom error class for trend-related failures.
- * Provides structured error information for proper handling upstream.
+ * Custom error class for trend-related operations.
+ * Extends Error with additional context for structured logging.
  */
 export class TrendError extends Error {
-  public readonly code: TrendErrorCode;
-  public readonly context?: Record<string, unknown>;
-
   constructor(
-    code: TrendErrorCode,
     message: string,
-    context?: Record<string, unknown>
+    public readonly code: TrendErrorCode,
+    public readonly context?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'TrendError';
-    this.code = code;
-    this.context = context;
-    
-    // Maintains proper stack trace in V8 environments
+    // Maintain proper stack trace in V8 environments
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, TrendError);
     }
   }
-
-  /**
-   * Creates a formatted log entry for structured logging.
-   */
-  toLogEntry(): Record<string, unknown> {
-    return {
-      errorType: this.name,
-      errorCode: this.code,
-      message: this.message,
-      context: this.context,
-      stack: this.stack,
-    };
-  }
 }
 
-// ============================================================================
+/**
+ * Error codes for trend operations.
+ */
+export enum TrendErrorCode {
+  INVALID_INPUT = 'INVALID_INPUT',
+  INSUFFICIENT_DATA = 'INSUFFICIENT_DATA',
+  ANALYSIS_FAILED = 'ANALYSIS_FAILED',
+  NOT_FOUND = 'NOT_FOUND',
+  TIMEOUT = 'TIMEOUT',
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
+}
+
+// =============================================================================
 // Type Guards
-// ============================================================================
+// =============================================================================
 
 /**
- * Type guard to check if a value is a valid TrendDirection.
+ * Type guard to check if a value is a valid TrendId.
  */
-export function isTrendDirection(value: unknown): value is TrendDirection {
-  return Object.values(TrendDirection).includes(value as TrendDirection);
+export function isTrendId(value: unknown): value is TrendId {
+  return TrendIdSchema.safeParse(value).success;
 }
 
 /**
  * Type guard to check if a value is a valid TrendDataPoint.
  */
 export function isTrendDataPoint(value: unknown): value is TrendDataPoint {
-  return trendDataPointSchema.safeParse(value).success;
+  return TrendDataPointSchema.safeParse(value).success;
 }
 
 /**
- * Type guard to check if an error is a TrendError.
+ * Type guard to check if a value is a valid TrendSeries.
  */
-export function isTrendError(error: unknown): error is TrendError {
-  return error instanceof TrendError;
+export function isTrendSeries(value: unknown): value is TrendSeries {
+  return TrendSeriesSchema.safeParse(value).success;
 }
 
-// ============================================================================
-// Constants
-// ============================================================================
+// =============================================================================
+// Utility Types
+// =============================================================================
 
 /**
- * Default configuration values for trend analysis.
+ * Partial type for creating new TrendSeries (omits generated fields).
  */
-export const DEFAULT_TREND_CONFIG: Readonly<TrendConfig> = {
-  algorithm: TrendAlgorithm.LINEAR_REGRESSION,
-  granularity: TrendGranularity.DAY,
-  windowSize: 30,
-} as const;
+export type CreateTrendSeriesInput = Omit<
+  TrendSeries,
+  'id' | 'createdAt' | 'updatedAt'
+>;
 
 /**
- * Minimum number of data points required for reliable trend analysis.
- * Below this threshold, INSUFFICIENT_DATA error should be thrown.
+ * Partial type for updating existing TrendSeries (only allows mutable fields).
  */
-export const MIN_DATA_POINTS = 3;
+export type UpdateTrendSeriesInput = Partial<
+  Pick<TrendSeries, 'name' | 'dataPoints'>
+>;
 
 /**
- * Confidence threshold below which trend results should be treated as unreliable.
+ * Query parameters for filtering trend series.
  */
-export const MIN_CONFIDENCE_THRESHOLD = 0.5;
+export interface TrendSeriesQuery {
+  readonly types?: readonly TrendType[];
+  readonly granularity?: TrendGranularity;
+  readonly startDate?: ISOTimestamp;
+  readonly endDate?: ISOTimestamp;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+/**
+ * Validation schema for TrendSeriesQuery.
+ */
+export const TrendSeriesQuerySchema = z.object({
+  types: z.array(z.nativeEnum(TrendType)).optional(),
+  granularity: z.nativeEnum(TrendGranularity).optional(),
+  startDate: ISOTimestampSchema.optional(),
+  endDate: ISOTimestampSchema.optional(),
+  limit: z.number().int().min(1).max(1000).optional(),
+  offset: z.number().int().min(0).optional(),
+});

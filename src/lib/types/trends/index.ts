@@ -1,34 +1,44 @@
 /**
- * Trends Types - Public API Exports
+ * Trends Types - Public Exports
  * 
  * This module exports all type definitions for the Trends feature.
  * Following the six-layer architecture: Types → Config → Repo → Service → Runtime → UI
  */
 
-// ============================================================================
-// Domain Types (Core Business Entities)
-// ============================================================================
+// ==========================================
+// Domain Types (Core business entities)
+// ==========================================
 
 /**
- * Represents the direction of a trend
+ * Represents the time range for trend analysis
  */
-export enum TrendDirection {
-  UP = 'UP',
-  DOWN = 'DOWN',
-  FLAT = 'FLAT',
-  VOLATILE = 'VOLATILE',
-}
+export type TrendTimeRange = 
+  | '1h'   // Last 1 hour
+  | '24h'  // Last 24 hours
+  | '7d'   // Last 7 days
+  | '30d'  // Last 30 days
+  | '90d'  // Last 90 days
+  | 'custom'; // Custom date range
 
 /**
- * Represents the granularity of trend data
+ * Supported metric types for trend analysis
  */
-export enum TrendGranularity {
-  MINUTE = 'MINUTE',
-  HOUR = 'HOUR',
-  DAY = 'DAY',
-  WEEK = 'WEEK',
-  MONTH = 'MONTH',
-}
+export type TrendMetricType = 
+  | 'deployment_frequency'
+  | 'lead_time'
+  | 'change_failure_rate'
+  | 'mttr' // Mean Time To Recovery
+  | 'pipeline_duration'
+  | 'success_rate';
+
+/**
+ * Aggregation method for trend data points
+ */
+export type TrendAggregation = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'p50' | 'p95' | 'p99';
+
+// ==========================================
+// Entity Types
+// ==========================================
 
 /**
  * Core trend data point entity
@@ -36,547 +46,385 @@ export enum TrendGranularity {
 export interface TrendDataPoint {
   /** Unique identifier for the data point */
   readonly id: string;
-  /** Timestamp when the data was recorded */
+  /** Timestamp when the metric was recorded */
   readonly timestamp: Date;
-  /** The metric value at this point in time */
+  /** The metric value */
   readonly value: number;
   /** Optional metadata associated with this data point */
   readonly metadata?: Record<string, unknown>;
 }
 
 /**
- * Trend series containing multiple data points for a specific metric
+ * Trend series representing a collection of data points for a specific metric
  */
 export interface TrendSeries {
   /** Unique identifier for the series */
   readonly id: string;
-  /** Human-readable name of the metric */
+  /** Human-readable name of the series */
   readonly name: string;
-  /** Metric identifier (e.g., 'cpu_usage', 'memory_consumption') */
-  readonly metricId: string;
-  /** Granularity of the data points */
-  readonly granularity: TrendGranularity;
-  /** Ordered array of data points (oldest to newest) */
-  readonly dataPoints: ReadonlyArray<TrendDataPoint>;
-  /** Calculated trend direction based on recent data */
-  readonly direction: TrendDirection;
-  /** Percentage change from start to end of series */
-  readonly percentChange: number;
-  /** When this series was last updated */
-  readonly lastUpdated: Date;
+  /** The metric type being tracked */
+  readonly metricType: TrendMetricType;
+  /** Color for visual representation (hex format) */
+  readonly color: string;
+  /** Ordered collection of data points (oldest to newest) */
+  readonly dataPoints: readonly TrendDataPoint[];
+  /** Aggregation method used for this series */
+  readonly aggregation: TrendAggregation;
 }
 
 /**
- * Trend analysis result with statistical insights
+ * Complete trend analysis result for a given time range
  */
 export interface TrendAnalysis {
-  /** The series that was analyzed */
-  readonly series: TrendSeries;
-  /** Statistical summary of the series */
+  /** Unique identifier for this analysis */
+  readonly id: string;
+  /** Time range used for this analysis */
+  readonly timeRange: TrendTimeRange;
+  /** Start of the analysis period */
+  readonly startDate: Date;
+  /** End of the analysis period */
+  readonly endDate: Date;
+  /** Collection of trend series */
+  readonly series: readonly TrendSeries[];
+  /** Computed statistics across all series */
   readonly statistics: TrendStatistics;
-  /** Detected anomalies in the data */
-  readonly anomalies: ReadonlyArray<TrendAnomaly>;
-  /** Forecasted future values if available */
-  readonly forecast?: TrendForecast;
+  /** When this analysis was generated */
+  readonly generatedAt: Date;
 }
 
 /**
- * Statistical summary of a trend series
+ * Statistical summary of trend data
  */
 export interface TrendStatistics {
-  /** Minimum value in the series */
-  readonly min: number;
-  /** Maximum value in the series */
-  readonly max: number;
-  /** Arithmetic mean of all values */
-  readonly mean: number;
-  /** Median value */
-  readonly median: number;
-  /** Standard deviation */
-  readonly stdDev: number;
-  /** 95th percentile value */
-  readonly p95: number;
-  /** 99th percentile value */
-  readonly p99: number;
+  /** Overall trend direction */
+  readonly trendDirection: 'up' | 'down' | 'stable';
+  /** Percentage change from previous period */
+  readonly percentChange: number;
+  /** Average value across all data points */
+  readonly average: number;
+  /** Minimum value observed */
+  readonly minimum: number;
+  /** Maximum value observed */
+  readonly maximum: number;
+  /** Total number of data points */
+  readonly totalDataPoints: number;
+}
+
+// ==========================================
+// Configuration Types
+// ==========================================
+
+/**
+ * Configuration for trend data retrieval
+ */
+export interface TrendConfig {
+  /** Time range for the trend analysis */
+  readonly timeRange: TrendTimeRange;
+  /** Specific metric types to include */
+  readonly metricTypes: readonly TrendMetricType[];
+  /** Aggregation method for data points */
+  readonly aggregation: TrendAggregation;
+  /** Custom start date (required when timeRange is 'custom') */
+  readonly customStartDate?: Date;
+  /** Custom end date (required when timeRange is 'custom') */
+  readonly customEndDate?: Date;
+  /** Maximum number of data points to return per series */
+  readonly maxDataPoints?: number;
+  /** Filter by specific entity IDs (e.g., pipeline IDs) */
+  readonly entityFilter?: readonly string[];
 }
 
 /**
- * Detected anomaly in trend data
+ * Validation result for trend configuration
  */
-export interface TrendAnomaly {
-  /** Unique identifier for the anomaly */
-  readonly id: string;
-  /** Type of anomaly detected */
-  readonly type: AnomalyType;
-  /** Severity level of the anomaly */
-  readonly severity: AnomalySeverity;
-  /** Data point where anomaly was detected */
-  readonly dataPoint: TrendDataPoint;
-  /** Expected value based on historical patterns */
-  readonly expectedValue: number;
-  /** Actual deviation from expected */
-  readonly deviation: number;
-  /** Human-readable description */
-  readonly description: string;
+export interface TrendConfigValidation {
+  readonly isValid: boolean;
+  readonly errors: readonly TrendValidationError[];
 }
 
 /**
- * Types of anomalies that can be detected
+ * Individual validation error
  */
-export enum AnomalyType {
-  SPIKE = 'SPIKE',
-  DROP = 'DROP',
-  PATTERN_BREAK = 'PATTERN_BREAK',
-  SEASONAL_DEVIATION = 'SEASONAL_DEVIATION',
+export interface TrendValidationError {
+  readonly field: string;
+  readonly message: string;
+  readonly code: TrendErrorCode;
+}
+
+// ==========================================
+// Error Types
+// ==========================================
+
+/**
+ * Error codes specific to trend operations
+ */
+export type TrendErrorCode = 
+  | 'INVALID_TIME_RANGE'
+  | 'INVALID_METRIC_TYPE'
+  | 'INVALID_AGGREGATION'
+  | 'MISSING_CUSTOM_DATES'
+  | 'INVALID_DATE_RANGE'
+  | 'DATA_NOT_AVAILABLE'
+  | 'CALCULATION_ERROR'
+  | 'TIMEOUT';
+
+/**
+ * Custom error class for trend-related errors
+ */
+export class TrendError extends Error {
+  constructor(
+    message: string,
+    public readonly code: TrendErrorCode,
+    public readonly field?: string,
+    public readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = 'TrendError';
+    // Maintain proper stack trace in V8 environments
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, TrendError);
+    }
+  }
+}
+
+// ==========================================
+// Repository Types
+// ==========================================
+
+/**
+ * Interface for trend data repository operations
+ */
+export interface TrendRepository {
+  /** Fetch trend series based on configuration */
+  fetchSeries(config: TrendConfig): Promise<readonly TrendSeries[]>;
+  /** Check if data is available for given config */
+  hasData(config: TrendConfig): Promise<boolean>;
+  /** Get available date range for a metric type */
+  getAvailableDateRange(metricType: TrendMetricType): Promise<{ start: Date; end: Date } | null>;
+}
+
+// ==========================================
+// Service Types
+// ==========================================
+
+/**
+ * Input parameters for trend analysis service
+ */
+export interface AnalyzeTrendsInput {
+  readonly config: TrendConfig;
+  readonly compareWithPrevious?: boolean;
 }
 
 /**
- * Severity levels for anomalies
+ * Output from trend analysis service
  */
-export enum AnomalySeverity {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
+export interface AnalyzeTrendsOutput {
+  readonly analysis: TrendAnalysis;
+  readonly previousPeriodAnalysis?: TrendAnalysis;
+  readonly comparison?: TrendComparison;
 }
 
 /**
- * Forecasted trend data
+ * Comparison between current and previous period
  */
-export interface TrendForecast {
-  /** Method used for forecasting */
-  readonly method: ForecastMethod;
-  /** Confidence level (0-1) */
-  readonly confidence: number;
-  /** Predicted data points */
-  readonly predictions: ReadonlyArray<TrendDataPoint>;
-  /** Prediction interval (lower and upper bounds) */
-  readonly predictionInterval?: {
-    readonly lower: ReadonlyArray<TrendDataPoint>;
-    readonly upper: ReadonlyArray<TrendDataPoint>;
+export interface TrendComparison {
+  readonly periodOverPeriodChange: number;
+  readonly isImprovement: boolean;
+  readonly significantChanges: readonly TrendSignificantChange[];
+}
+
+/**
+ * Significant change detected in trend analysis
+ */
+export interface TrendSignificantChange {
+  readonly metricType: TrendMetricType;
+  readonly changePercent: number;
+  readonly thresholdExceeded: boolean;
+}
+
+// ==========================================
+// Runtime Types
+// ==========================================
+
+/**
+ * API request payload for trend endpoints
+ */
+export interface TrendApiRequest {
+  readonly timeRange: TrendTimeRange;
+  readonly metricTypes: readonly TrendMetricType[];
+  readonly aggregation?: TrendAggregation;
+  readonly startDate?: string; // ISO 8601 format
+  readonly endDate?: string;   // ISO 8601 format
+}
+
+/**
+ * API response payload for trend endpoints
+ */
+export interface TrendApiResponse {
+  readonly success: boolean;
+  readonly data?: TrendAnalysis;
+  readonly error?: {
+    readonly code: TrendErrorCode;
+    readonly message: string;
   };
 }
 
-/**
- * Forecasting methods available
- */
-export enum ForecastMethod {
-  LINEAR_REGRESSION = 'LINEAR_REGRESSION',
-  EXPONENTIAL_SMOOTHING = 'EXPONENTIAL_SMOOTHING',
-  ARIMA = 'ARIMA',
-  PROPHET = 'PROPHET',
-}
-
-// ============================================================================
-// Input/Configuration Types (Config Layer)
-// ============================================================================
+// ==========================================
+// UI Types
+// ==========================================
 
 /**
- * Configuration for fetching trend data
+ * Props for trend chart component
  */
-export interface TrendQueryConfig {
-  /** Metric identifier to query */
-  readonly metricId: string;
-  /** Start of the time range */
-  readonly startTime: Date;
-  /** End of the time range */
-  readonly endTime: Date;
-  /** Desired granularity */
-  readonly granularity: TrendGranularity;
-  /** Optional filters to apply */
-  readonly filters?: TrendFilters;
-  /** Maximum number of data points to return */
-  readonly limit?: number;
+export interface TrendChartProps {
+  readonly analysis: TrendAnalysis;
+  readonly onDataPointClick?: (dataPoint: TrendDataPoint, series: TrendSeries) => void;
+  readonly showLegend?: boolean;
+  readonly height?: number;
+  readonly loading?: boolean;
 }
 
 /**
- * Filters that can be applied to trend queries
+ * Props for trend filter component
  */
-export interface TrendFilters {
-  /** Filter by specific tags */
-  readonly tags?: ReadonlyArray<string>;
-  /** Filter by source system */
-  readonly source?: string;
-  /** Custom filter expression */
-  readonly expression?: string;
+export interface TrendFilterProps {
+  readonly config: TrendConfig;
+  readonly onChange: (config: TrendConfig) => void;
+  readonly availableMetricTypes: readonly TrendMetricType[];
+  readonly disabled?: boolean;
 }
 
-/**
- * Configuration for trend analysis
- */
-export interface TrendAnalysisConfig {
-  /** Whether to detect anomalies */
-  readonly detectAnomalies: boolean;
-  /** Anomaly detection sensitivity (0-1, higher = more sensitive) */
-  readonly anomalySensitivity?: number;
-  /** Whether to generate forecast */
-  readonly generateForecast: boolean;
-  /** Number of periods to forecast */
-  readonly forecastPeriods?: number;
-  /** Forecasting method preference */
-  readonly forecastMethod?: ForecastMethod;
-}
-
-// ============================================================================
-// Repository Types (Repo Layer)
-// ============================================================================
-
-/**
- * Repository interface for trend data access
- * Implementations handle persistence concerns
- */
-export interface TrendRepository {
-  /**
-   * Fetch trend series based on query configuration
-   * @throws {TrendRepositoryError} if query fails
-   */
-  fetchSeries(config: TrendQueryConfig): Promise<TrendSeries>;
-
-  /**
-   * Fetch multiple series in a single operation
-   * @throws {TrendRepositoryError} if query fails
-   */
-  fetchMultipleSeries(configs: ReadonlyArray<TrendQueryConfig>): Promise<ReadonlyArray<TrendSeries>>;
-
-  /**
-   * Store a new trend data point
-   * @throws {TrendRepositoryError} if storage fails
-   */
-  storeDataPoint(seriesId: string, dataPoint: TrendDataPoint): Promise<void>;
-
-  /**
-   * Check if repository is healthy
-   */
-  healthCheck(): Promise<boolean>;
-}
-
-/**
- * Error thrown by trend repository operations
- */
-export class TrendRepositoryError extends Error {
-  constructor(
-    message: string,
-    public readonly code: TrendErrorCode,
-    public readonly originalError?: Error
-  ) {
-    super(message);
-    this.name = 'TrendRepositoryError';
-    Object.setPrototypeOf(this, TrendRepositoryError.prototype);
-  }
-}
-
-// ============================================================================
-// Service Types (Service Layer)
-// ============================================================================
-
-/**
- * Service interface for trend business logic
- */
-export interface TrendService {
-  /**
-   * Get trend analysis for a metric
-   * @throws {TrendServiceError} if analysis fails
-   */
-  analyzeTrends(config: TrendQueryConfig, analysisConfig: TrendAnalysisConfig): Promise<TrendAnalysis>;
-
-  /**
-   * Compare trends across multiple metrics
-   * @throws {TrendServiceError} if comparison fails
-   */
-  compareTrends(configs: ReadonlyArray<TrendQueryConfig>): Promise<TrendComparison>;
-
-  /**
-   * Get real-time trend updates (for streaming)
-   */
-  subscribeToTrends(metricId: string): TrendSubscription;
-}
-
-/**
- * Comparison result for multiple trends
- */
-export interface TrendComparison {
-  /** Series being compared */
-  readonly series: ReadonlyArray<TrendSeries>;
-  /** Correlation matrix between series */
-  readonly correlations: ReadonlyArray<SeriesCorrelation>;
-  /** Comparative statistics */
-  readonly comparativeStats: ComparativeStatistics;
-}
-
-/**
- * Correlation between two series
- */
-export interface SeriesCorrelation {
-  /** First series ID */
-  readonly seriesIdA: string;
-  /** Second series ID */
-  readonly seriesIdB: string;
-  /** Pearson correlation coefficient (-1 to 1) */
-  readonly coefficient: number;
-  /** Strength of correlation */
-  readonly strength: CorrelationStrength;
-}
-
-/**
- * Correlation strength categories
- */
-export enum CorrelationStrength {
-  NONE = 'NONE',
-  WEAK = 'WEAK',
-  MODERATE = 'MODERATE',
-  STRONG = 'STRONG',
-}
-
-/**
- * Comparative statistics across series
- */
-export interface ComparativeStatistics {
-  /** Series with highest mean value */
-  readonly highestMean: string;
-  /** Series with most volatility (highest std dev) */
-  readonly mostVolatile: string;
-  /** Series with strongest upward trend */
-  readonly strongestGrowth: string;
-}
-
-/**
- * Subscription for real-time trend updates
- */
-export interface TrendSubscription {
-  /** Unique subscription identifier */
-  readonly id: string;
-  /** Async iterator for trend updates */
-  [Symbol.asyncIterator](): AsyncIterator<TrendUpdate>;
-  /** Unsubscribe from updates */
-  unsubscribe(): Promise<void>;
-}
-
-/**
- * Real-time trend update
- */
-export interface TrendUpdate {
-  /** Timestamp of the update */
-  readonly timestamp: Date;
-  /** Updated series data */
-  readonly series: TrendSeries;
-  /** Type of update */
-  readonly type: UpdateType;
-}
-
-/**
- * Types of trend updates
- */
-export enum UpdateType {
-  NEW_DATA_POINT = 'NEW_DATA_POINT',
-  SERIES_UPDATED = 'SERIES_UPDATED',
-  ANOMALY_DETECTED = 'ANOMALY_DETECTED',
-}
-
-/**
- * Error thrown by trend service operations
- */
-export class TrendServiceError extends Error {
-  constructor(
-    message: string,
-    public readonly code: TrendErrorCode,
-    public readonly context?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'TrendServiceError';
-    Object.setPrototypeOf(this, TrendServiceError.prototype);
-  }
-}
-
-// ============================================================================
-// Runtime Types (Runtime Layer)
-// ============================================================================
-
-/**
- * Error codes for trend operations
- */
-export enum TrendErrorCode {
-  // Repository errors
-  REPOSITORY_CONNECTION_FAILED = 'REPOSITORY_CONNECTION_FAILED',
-  REPOSITORY_QUERY_FAILED = 'REPOSITORY_QUERY_FAILED',
-  REPOSITORY_STORAGE_FAILED = 'REPOSITORY_STORAGE_FAILED',
-  
-  // Service errors
-  SERVICE_ANALYSIS_FAILED = 'SERVICE_ANALYSIS_FAILED',
-  SERVICE_INVALID_CONFIG = 'SERVICE_INVALID_CONFIG',
-  SERVICE_COMPARISON_FAILED = 'SERVICE_COMPARISON_FAILED',
-  
-  // Validation errors
-  VALIDATION_INVALID_DATE_RANGE = 'VALIDATION_INVALID_DATE_RANGE',
-  VALIDATION_INVALID_GRANULARITY = 'VALIDATION_INVALID_GRANULARITY',
-  VALIDATION_MISSING_REQUIRED_FIELD = 'VALIDATION_MISSING_REQUIRED_FIELD',
-  
-  // Runtime errors
-  RUNTIME_TIMEOUT = 'RUNTIME_TIMEOUT',
-  RUNTIME_RESOURCE_EXHAUSTED = 'RUNTIME_RESOURCE_EXHAUSTED',
-}
-
-/**
- * Runtime configuration for trend processing
- */
-export interface TrendRuntimeConfig {
-  /** Maximum query execution time in milliseconds */
-  readonly queryTimeoutMs: number;
-  /** Maximum data points per query */
-  readonly maxDataPoints: number;
-  /** Whether to enable caching */
-  readonly enableCaching: boolean;
-  /** Cache TTL in seconds */
-  readonly cacheTtlSeconds?: number;
-}
-
-// ============================================================================
-// UI Types (UI Layer)
-// ============================================================================
-
-/**
- * View model for trend visualization
- */
-export interface TrendViewModel {
-  /** Series data formatted for display */
-  readonly series: TrendSeries;
-  /** Chart configuration */
-  readonly chartConfig: ChartConfig;
-  /** Display options */
-  readonly displayOptions: DisplayOptions;
-  /** Interactive elements state */
-  readonly interactionState: InteractionState;
-}
-
-/**
- * Chart configuration for rendering
- */
-export interface ChartConfig {
-  /** Chart type */
-  readonly type: ChartType;
-  /** Color scheme */
-  readonly colorScheme: ColorScheme;
-  /** Whether to show grid lines */
-  readonly showGrid: boolean;
-  /** Whether to show legend */
-  readonly showLegend: boolean;
-  /** Y-axis configuration */
-  readonly yAxis?: AxisConfig;
-  /** X-axis configuration */
-  readonly xAxis?: AxisConfig;
-}
-
-/**
- * Supported chart types
- */
-export enum ChartType {
-  LINE = 'LINE',
-  AREA = 'AREA',
-  BAR = 'BAR',
-  SCATTER = 'SCATTER',
-}
-
-/**
- * Color scheme options
- */
-export enum ColorScheme {
-  DEFAULT = 'DEFAULT',
-  DIVERGING = 'DIVERGING',
-  SEQUENTIAL = 'SEQUENTIAL',
-  CATEGORICAL = 'CATEGORICAL',
-}
-
-/**
- * Axis configuration
- */
-export interface AxisConfig {
-  /** Axis label */
-  readonly label?: string;
-  /** Minimum value (auto if not specified) */
-  readonly min?: number;
-  /** Maximum value (auto if not specified) */
-  readonly max?: number;
-  /** Number of ticks */
-  readonly tickCount?: number;
-  /** Format string for values */
-  readonly format?: string;
-}
-
-/**
- * Display options for trend visualization
- */
-export interface DisplayOptions {
-  /** Whether to show anomalies highlighted */
-  readonly highlightAnomalies: boolean;
-  /** Whether to show forecast if available */
-  readonly showForecast: boolean;
-  /** Whether to show statistics panel */
-  readonly showStatistics: boolean;
-  /** Timezone for display */
-  readonly timezone: string;
-}
-
-/**
- * Interactive state for trend UI
- */
-export interface InteractionState {
-  /** Currently selected time range */
-  readonly selectedRange?: { start: Date; end: Date };
-  /** Currently hovered data point */
-  readonly hoveredPoint?: TrendDataPoint;
-  /** Zoom level (1 = 100%) */
-  readonly zoomLevel: number;
-  /** Whether comparison mode is active */
-  readonly comparisonMode: boolean;
-}
-
-// ============================================================================
+// ==========================================
 // Utility Types
-// ============================================================================
+// ==========================================
 
 /**
- * Result type for operations that may fail
+ * Type guard to check if a value is a valid TrendTimeRange
  */
-export type Result<T, E = TrendErrorCode> = 
-  | { readonly success: true; readonly data: T }
-  | { readonly success: false; readonly error: E; readonly message: string };
+export function isTrendTimeRange(value: unknown): value is TrendTimeRange {
+  const validRanges: readonly TrendTimeRange[] = ['1h', '24h', '7d', '30d', '90d', 'custom'];
+  return typeof value === 'string' && validRanges.includes(value as TrendTimeRange);
+}
 
 /**
- * Nullable type helper
+ * Type guard to check if a value is a valid TrendMetricType
  */
-export type Nullable<T> = T | null | undefined;
+export function isTrendMetricType(value: unknown): value is TrendMetricType {
+  const validTypes: readonly TrendMetricType[] = [
+    'deployment_frequency',
+    'lead_time',
+    'change_failure_rate',
+    'mttr',
+    'pipeline_duration',
+    'success_rate'
+  ];
+  return typeof value === 'string' && validTypes.includes(value as TrendMetricType);
+}
 
 /**
- * Deep readonly type helper
+ * Validates trend configuration and returns validation result
  */
-export type DeepReadonly<T> = {
-  readonly [P in keyof T]: T[P] extends object ? DeepReadonly<T[P]> : T[P];
-};
+export function validateTrendConfig(config: unknown): TrendConfigValidation {
+  const errors: TrendValidationError[] = [];
 
-// ============================================================================
-// Re-exports for convenience
-// ============================================================================
+  if (!config || typeof config !== 'object') {
+    return {
+      isValid: false,
+      errors: [{ field: 'config', message: 'Config must be an object', code: 'INVALID_TIME_RANGE' }]
+    };
+  }
 
+  const cfg = config as Partial<TrendConfig>;
+
+  // Validate timeRange
+  if (!cfg.timeRange || !isTrendTimeRange(cfg.timeRange)) {
+    errors.push({
+      field: 'timeRange',
+      message: `Invalid timeRange. Must be one of: 1h, 24h, 7d, 30d, 90d, custom`,
+      code: 'INVALID_TIME_RANGE'
+    });
+  }
+
+  // Validate custom dates when timeRange is 'custom'
+  if (cfg.timeRange === 'custom') {
+    if (!cfg.customStartDate || !(cfg.customStartDate instanceof Date) || isNaN(cfg.customStartDate.getTime())) {
+      errors.push({
+        field: 'customStartDate',
+        message: 'customStartDate is required and must be a valid Date when timeRange is custom',
+        code: 'MISSING_CUSTOM_DATES'
+      });
+    }
+    if (!cfg.customEndDate || !(cfg.customEndDate instanceof Date) || isNaN(cfg.customEndDate.getTime())) {
+      errors.push({
+        field: 'customEndDate',
+        message: 'customEndDate is required and must be a valid Date when timeRange is custom',
+        code: 'MISSING_CUSTOM_DATES'
+      });
+    }
+    if (cfg.customStartDate && cfg.customEndDate && cfg.customStartDate > cfg.customEndDate) {
+      errors.push({
+        field: 'customDateRange',
+        message: 'customStartDate must be before customEndDate',
+        code: 'INVALID_DATE_RANGE'
+      });
+    }
+  }
+
+  // Validate metricTypes
+  if (!Array.isArray(cfg.metricTypes) || cfg.metricTypes.length === 0) {
+    errors.push({
+      field: 'metricTypes',
+      message: 'metricTypes must be a non-empty array',
+      code: 'INVALID_METRIC_TYPE'
+    });
+  } else {
+    cfg.metricTypes.forEach((mt, index) => {
+      if (!isTrendMetricType(mt)) {
+        errors.push({
+          field: `metricTypes[${index}]`,
+          message: `Invalid metric type: ${String(mt)}`,
+          code: 'INVALID_METRIC_TYPE'
+        });
+      }
+    });
+  }
+
+  // Validate aggregation
+  const validAggregations: readonly TrendAggregation[] = ['sum', 'avg', 'min', 'max', 'count', 'p50', 'p95', 'p99'];
+  if (cfg.aggregation && !validAggregations.includes(cfg.aggregation)) {
+    errors.push({
+      field: 'aggregation',
+      message: `Invalid aggregation. Must be one of: ${validAggregations.join(', ')}`,
+      code: 'INVALID_AGGREGATION'
+    });
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+// Re-export all types for convenience
 export type {
-  TrendDataPoint,
-  TrendSeries,
-  TrendAnalysis,
-  TrendStatistics,
-  TrendAnomaly,
-  TrendForecast,
-  TrendQueryConfig,
-  TrendFilters,
-  TrendAnalysisConfig,
-  TrendRepository,
-  TrendService,
-  TrendComparison,
-  SeriesCorrelation,
-  ComparativeStatistics,
-  TrendSubscription,
-  TrendUpdate,
-  TrendRuntimeConfig,
-  TrendViewModel,
-  ChartConfig,
-  AxisConfig,
-  DisplayOptions,
-  InteractionState,
+  TrendTimeRange as TimeRange,
+  TrendMetricType as MetricType,
+  TrendAggregation as Aggregation,
+  TrendDataPoint as DataPoint,
+  TrendSeries as Series,
+  TrendAnalysis as Analysis,
+  TrendStatistics as Statistics,
+  TrendConfig as Config,
+  TrendConfigValidation as ConfigValidation,
+  TrendValidationError as ValidationError,
+  TrendErrorCode as ErrorCode,
+  TrendRepository as Repository,
+  AnalyzeTrendsInput as ServiceInput,
+  AnalyzeTrendsOutput as ServiceOutput,
+  TrendComparison as Comparison,
+  TrendSignificantChange as SignificantChange,
+  TrendApiRequest as ApiRequest,
+  TrendApiResponse as ApiResponse,
+  TrendChartProps as ChartProps,
+  TrendFilterProps as FilterProps
 };
