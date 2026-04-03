@@ -1,30 +1,129 @@
 /**
- * @deprecated This test file has been removed after refactoring.
+ * Integration tests for the Page component
  * 
- * The Page component tests have been restructured to follow the six-layer architecture:
- * - Unit tests for UI components are now in: src/components/**/*.test.tsx
- * - Service layer tests are in: src/services/**/*.test.ts
- * - Integration tests are in: src/__tests__/integration/**/*.test.tsx
- * 
- * For the new Page component tests, see: src/app/page.test.tsx (if updated)
- * or the component-specific test files.
- * 
- * This file is kept as a placeholder to prevent import errors during migration.
- * It should be deleted once all references are updated.
+ * Following the six-layer architecture:
+ * - Types: src/types/page.types.ts
+ * - Config: src/config/page.config.ts
+ * - Repo: src/repos/page.repo.ts
+ * - Service: src/services/page.service.ts
+ * - Runtime: src/app/page.tsx
+ * - UI: src/components/page/
  */
 
-import { describe, it } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { PageService } from '../services/page.service';
+import { PageRepo } from '../repos/page.repo';
+import { PageConfig } from '../config/page.config';
+import Page from '../app/page';
+import type { PageData, PageProps } from '../types/page.types';
 
-describe('Page Component (deprecated)', () => {
-  it('placeholder - tests moved to new structure', () => {
-    // Tests removed after refactoring - see file header for new locations
+describe('Page Integration Tests', () => {
+  let pageService: PageService;
+  let pageRepo: PageRepo;
+  let pageConfig: PageConfig;
+
+  beforeEach(() => {
+    pageConfig = new PageConfig({
+      defaultTitle: 'Test Page',
+      defaultDescription: 'Test Description',
+    });
+    pageRepo = new PageRepo(pageConfig);
+    pageService = new PageService(pageRepo);
   });
-});    type: 'BUILD',
-        name: 'Build Stage',
-        enabled: true,
-        config: {
-          image: 'node:18',
-          commands: ['npm ci', 'npm run build'],
+
+  describe('Service Layer Integration', () => {
+    it('should fetch page data through service layer', async () => {
+      const pageData: PageData = await pageService.getPageData('home');
+      
+      expect(pageData).toBeDefined();
+      expect(pageData.title).toBe('Test Page');
+      expect(pageData.description).toBe('Test Description');
+    });
+
+    it('should handle service errors with proper logging', async () => {
+      pageRepo.getPage = async () => {
+        throw new Error('Repository error');
+      };
+
+      await expect(pageService.getPageData('invalid')).rejects.toThrow('Failed to fetch page data');
+    });
+
+    it('should validate page data structure', async () => {
+      const pageData = await pageService.getPageData('home');
+      
+      expect(pageData).toHaveProperty('id');
+      expect(pageData).toHaveProperty('title');
+      expect(pageData).toHaveProperty('description');
+      expect(pageData).toHaveProperty('content');
+      expect(pageData).toHaveProperty('metadata');
+    });
+  });
+
+  describe('Repository Layer Integration', () => {
+    it('should fetch from repository with config', async () => {
+      const page = await pageRepo.getPage('home');
+      
+      expect(page).toBeDefined();
+      expect(page.config).toEqual(pageConfig.getConfig());
+    });
+
+    it('should handle missing page gracefully', async () => {
+      const page = await pageRepo.getPage('non-existent');
+      
+      expect(page).toBeNull();
+    });
+  });
+
+  describe('UI Component Integration', () => {
+    it('should render page with service data', async () => {
+      const pageData = await pageService.getPageData('home');
+      const props: PageProps = { data: pageData };
+      
+      render(<Page {...props} />);
+      
+      expect(screen.getByRole('main')).toBeInTheDocument();
+      expect(screen.getByText(pageData.title)).toBeInTheDocument();
+    });
+
+    it('should handle loading state', () => {
+      const props: PageProps = { data: null, loading: true };
+      
+      render(<Page {...props} />);
+      
+      expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    });
+
+    it('should handle error state', () => {
+      const props: PageProps = { 
+        data: null, 
+        error: new Error('Failed to load') 
+      };
+      
+      render(<Page {...props} />);
+      
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to load');
+    });
+  });
+
+  describe('End-to-End Flow', () => {
+    it('should complete full data flow from repo to UI', async () => {
+      // Repo layer
+      const repoData = await pageRepo.getPage('home');
+      expect(repoData).toBeDefined();
+
+      // Service layer transformation
+      const serviceData = await pageService.transformPageData(repoData);
+      expect(serviceData.title).toBeDefined();
+
+      // UI rendering
+      const props: PageProps = { data: serviceData };
+      render(<Page {...props} />);
+      
+      expect(screen.getByRole('heading')).toHaveTextContent(serviceData.title);
+    });
+  });
+});nds: ['npm ci', 'npm run build'],
         },
       },
     ],
