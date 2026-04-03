@@ -1,851 +1,654 @@
-/**
- * @file workflow.test.ts
- * @description Comprehensive test suite for workflow orchestration layer
- * @module Tests/AI/Workflow
- */
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { WorkflowEngine, WorkflowStep, WorkflowContext, WorkflowResult } from './workflow';
+import { Logger } from '../logging/logger';
+import { ValidationError } from '../errors/validation-error';
+import { WorkflowError } from '../errors/workflow-error';
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type {
-  WorkflowConfig,
-  WorkflowStep,
-  WorkflowContext,
-  WorkflowResult,
-  StepHandler,
-  StepTransition,
-  WorkflowState,
-} from './types';
-import { WorkflowEngine } from './workflow';
-import { createLogger } from '@/lib/utils/logger';
-import { WorkflowError, WorkflowValidationError, WorkflowExecutionError } from './errors';
-
-// Mock dependencies
-vi.mock('@/lib/utils/logger', () => ({
-  createLogger: vi.fn(() => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn(function () {
-      return this;
-    }),
-  })),
-}));
-
-vi.mock('./errors', () => ({
-  WorkflowError: class WorkflowError extends Error {
-    constructor(message: string, public readonly code: string) {
-      super(message);
-      this.name = 'WorkflowError';
-    }
-  },
-  WorkflowValidationError: class WorkflowValidationError extends Error {
-    constructor(message: string, public readonly details: unknown) {
-      super(message);
-      this.name = 'WorkflowValidationError';
-    }
-  },
-  WorkflowExecutionError: class WorkflowExecutionError extends Error {
-    constructor(message: string, public readonly stepId: string, public readonly cause?: Error) {
-      super(message);
-      this.name = 'WorkflowExecutionError';
-    }
-  },
-}));
-
-// =============================================================================
-// Test Fixtures
-// =============================================================================
-
-/**
- * Creates a mock workflow step for testing
- */
-const createMockStep = (overrides: Partial<WorkflowStep> = {}): WorkflowStep => ({
-  id: 'test-step',
-  name: 'Test Step',
-  handler: 'testHandler',
-  config: {},
-  transitions: [],
-  ...overrides,
-});
-
-/**
- * Creates a mock workflow configuration for testing
- */
-const createMockConfig = (overrides: Partial<WorkflowConfig> = {}): WorkflowConfig => ({
-  id: 'test-workflow',
-  name: 'Test Workflow',
-  version: '1.0.0',
-  steps: [createMockStep()],
-  initialStep: 'test-step',
-  ...overrides,
-});
-
-/**
- * Creates a mock workflow context for testing
- */
-const createMockContext = (overrides: Partial<WorkflowContext> = {}): WorkflowContext => ({
-  workflowId: 'test-workflow',
-  executionId: 'exec-123',
-  input: {},
-  state: {},
-  metadata: {
-    startedAt: new Date(),
-    attempt: 1,
-  },
-  ...overrides,
-});
-
-/**
- * Creates a mock step handler for testing
- */
-const createMockHandler = (result: unknown = { success: true }): StepHandler => ({
-  execute: vi.fn().mockResolvedValue(result),
-  validate: vi.fn().mockResolvedValue(true),
-  rollback: vi.fn().mockResolvedValue(undefined),
-});
-
-// =============================================================================
-// Test Suite: WorkflowEngine
-// =============================================================================
+// Mock the logger
+jest.mock('../logging/logger');
 
 describe('WorkflowEngine', () => {
   let engine: WorkflowEngine;
-  let mockLogger: ReturnType<typeof createLogger>;
+  let mockLogger: jest.Mocked<Logger>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockLogger = createLogger('test');
-    engine = new WorkflowEngine();
+    mockLogger = new Logger('WorkflowEngine') as jest.Mocked<Logger>;
+    engine = new WorkflowEngine(mockLogger);
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
-  // ===========================================================================
-  // Layer 1: Types - Type Safety and Validation
-  // ===========================================================================
-
-  describe('Types Layer', () => {
-    it('should enforce WorkflowConfig type constraints', () => {
-      const config = createMockConfig({
-        id: 'typed-workflow',
-        version: '2.0.0',
-        steps: [
-          createMockStep({ id: 'step-1', handler: 'handler1' }),
-          createMockStep({ id: 'step-2', handler: 'handler2' }),
-        ],
-      });
-
-      // TypeScript compile-time check: config must have required fields
-      expect(config.id).toBeDefined();
-      expect(config.steps).toBeInstanceOf(Array);
-      expect(config.initialStep).toBeDefined();
-    });
-
-    it('should enforce WorkflowContext type constraints', () => {
-      const context = createMockContext({
-        input: { userId: 'user-123' },
-        state: { currentStep: 'step-1' },
-      });
-
-      expect(context.workflowId).toBe('test-workflow');
-      expect(context.executionId).toMatch(/^exec-/);
-      expect(context.metadata.startedAt).toBeInstanceOf(Date);
-    });
-
-    it('should enforce StepTransition type constraints', () => {
-      const transition: StepTransition = {
-        condition: 'success',
-        targetStep: 'next-step',
-        transform: (data: unknown) => data,
+  describe('registerStep', () => {
+    it('should register a valid workflow step', () => {
+      // Arrange
+      const step: WorkflowStep = {
+        id: 'test-step',
+        name: 'Test Step',
+        execute: jest.fn(),
       };
 
-      expect(transition.condition).toBeDefined();
-      expect(transition.targetStep).toBeDefined();
-    });
-  });
+      // Act
+      engine.registerStep(step);
 
-  // ===========================================================================
-  // Layer 2: Config - Configuration Management
-  // ===========================================================================
-
-  describe('Config Layer', () => {
-    it('should validate workflow configuration on registration', async () => {
-      const config = createMockConfig({
-        id: 'valid-config',
-        steps: [
-          createMockStep({ id: 'start', handler: 'startHandler' }),
-          createMockStep({ id: 'end', handler: 'endHandler' }),
-        ],
-        initialStep: 'start',
-      });
-
-      await expect(engine.registerWorkflow(config)).resolves.not.toThrow();
+      // Assert
+      const registeredStep = engine.getStep('test-step');
+      expect(registeredStep).toBe(step);
     });
 
-    it('should reject invalid workflow configuration', async () => {
-      const invalidConfig = createMockConfig({
-        id: 'invalid-config',
-        steps: [], // Empty steps array is invalid
-      });
+    it('should throw ValidationError when registering step without id', () => {
+      // Arrange
+      const step = {
+        name: 'Invalid Step',
+        execute: jest.fn(),
+      } as unknown as WorkflowStep;
 
-      await expect(engine.registerWorkflow(invalidConfig)).rejects.toThrow(
-        WorkflowValidationError
+      // Act & Assert
+      expect(() => engine.registerStep(step)).toThrow(ValidationError);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to register workflow step: missing required field "id"'
       );
     });
 
-    it('should reject duplicate workflow registration', async () => {
-      const config = createMockConfig({ id: 'duplicate-workflow' });
+    it('should throw ValidationError when registering step without execute function', () => {
+      // Arrange
+      const step = {
+        id: 'invalid-step',
+        name: 'Invalid Step',
+      } as unknown as WorkflowStep;
 
-      await engine.registerWorkflow(config);
-      await expect(engine.registerWorkflow(config)).rejects.toThrow(
-        WorkflowValidationError
-      );
+      // Act & Assert
+      expect(() => engine.registerStep(step)).toThrow(ValidationError);
     });
 
-    it('should validate step references in transitions', async () => {
-      const config = createMockConfig({
-        id: 'bad-transitions',
-        steps: [
-          createMockStep({
-            id: 'step-1',
-            transitions: [
-              { condition: 'success', targetStep: 'non-existent-step' },
-            ],
-          }),
-        ],
-      });
-
-      await expect(engine.registerWorkflow(config)).rejects.toThrow(
-        WorkflowValidationError
-      );
-    });
-  });
-
-  // ===========================================================================
-  // Layer 3: Repo - State Persistence and Retrieval
-  // ===========================================================================
-
-  describe('Repo Layer', () => {
-    it('should persist workflow state after each step', async () => {
-      const config = createMockConfig({
-        id: 'stateful-workflow',
-        steps: [
-          createMockStep({ id: 'step-1', handler: 'handler1' }),
-          createMockStep({ id: 'step-2', handler: 'handler2' }),
-        ],
-      });
-
-      const mockPersist = vi.fn().mockResolvedValue(undefined);
-      engine.setStatePersistence(mockPersist);
-
-      await engine.registerWorkflow(config);
-      const context = createMockContext();
-
-      await engine.execute(config.id, context);
-
-      expect(mockPersist).toHaveBeenCalled();
-      expect(mockPersist.mock.calls[0][0]).toMatchObject({
-        workflowId: config.id,
-        executionId: context.executionId,
-      });
-    });
-
-    it('should retrieve persisted state on resume', async () => {
-      const savedState: WorkflowState = {
-        currentStep: 'step-2',
-        data: { previousResult: 'value' },
-        completedSteps: ['step-1'],
+    it('should throw ValidationError when registering duplicate step id', () => {
+      // Arrange
+      const step: WorkflowStep = {
+        id: 'duplicate-step',
+        name: 'Duplicate Step',
+        execute: jest.fn(),
       };
 
-      const mockRetrieve = vi.fn().mockResolvedValue(savedState);
-      engine.setStateRetrieval(mockRetrieve);
+      // Act
+      engine.registerStep(step);
 
-      const result = await engine.resume('test-workflow', 'exec-123');
-
-      expect(mockRetrieve).toHaveBeenCalledWith('test-workflow', 'exec-123');
-      expect(result.context.state).toEqual(savedState.data);
-    });
-
-    it('should handle state persistence failures gracefully', async () => {
-      const config = createMockConfig();
-      const mockPersist = vi.fn().mockRejectedValue(new Error('DB connection lost'));
-
-      engine.setStatePersistence(mockPersist);
-
-      await engine.registerWorkflow(config);
-      const context = createMockContext();
-
-      await expect(engine.execute(config.id, context)).rejects.toThrow(
-        WorkflowExecutionError
+      // Assert
+      expect(() => engine.registerStep(step)).toThrow(ValidationError);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Attempted to register duplicate workflow step: duplicate-step'
       );
     });
   });
 
-  // ===========================================================================
-  // Layer 4: Service - Business Logic and Orchestration
-  // ===========================================================================
+  describe('executeWorkflow', () => {
+    it('should execute a single step workflow successfully', async () => {
+      // Arrange
+      const mockExecute = jest.fn().mockResolvedValue({ success: true, data: { result: 'done' } });
+      const step: WorkflowStep = {
+        id: 'single-step',
+        name: 'Single Step',
+        execute: mockExecute,
+      };
 
-  describe('Service Layer', () => {
-    it('should execute steps in sequence', async () => {
+      engine.registerStep(step);
+
+      const context: WorkflowContext = {
+        workflowId: 'test-workflow',
+        input: { value: 42 },
+        metadata: { userId: 'user-123' },
+      };
+
+      // Act
+      const result: WorkflowResult = await engine.executeWorkflow(['single-step'], context);
+
+      // Assert
+      expect(mockExecute).toHaveBeenCalledWith(context, expect.any(Object));
+      expect(result.success).toBe(true);
+      expect(result.stepResults).toHaveLength(1);
+      expect(result.stepResults[0].stepId).toBe('single-step');
+      expect(result.stepResults[0].success).toBe(true);
+    });
+
+    it('should execute multiple steps in sequence', async () => {
+      // Arrange
       const executionOrder: string[] = [];
 
-      const step1 = createMockStep({
+      const step1: WorkflowStep = {
         id: 'step-1',
-        handler: 'handler1',
-        transitions: [{ condition: 'success', targetStep: 'step-2' }],
-      });
-
-      const step2 = createMockStep({
-        id: 'step-2',
-        handler: 'handler2',
-      });
-
-      const config = createMockConfig({
-        id: 'sequential-workflow',
-        steps: [step1, step2],
-        initialStep: 'step-1',
-      });
-
-      const handler1 = createMockHandler({ status: 'complete', next: 'step-2' });
-      const handler2 = createMockHandler({ status: 'done' });
-
-      handler1.execute = vi.fn().mockImplementation(async () => {
-        executionOrder.push('step-1');
-        return { status: 'complete' };
-      });
-
-      handler2.execute = vi.fn().mockImplementation(async () => {
-        executionOrder.push('step-2');
-        return { status: 'done' };
-      });
-
-      engine.registerHandler('handler1', handler1);
-      engine.registerHandler('handler2', handler2);
-
-      await engine.registerWorkflow(config);
-      await engine.execute(config.id, createMockContext());
-
-      expect(executionOrder).toEqual(['step-1', 'step-2']);
-    });
-
-    it('should handle conditional branching based on step results', async () => {
-      const step1 = createMockStep({
-        id: 'decision-step',
-        handler: 'decisionHandler',
-        transitions: [
-          { condition: 'approved', targetStep: 'approval-path' },
-          { condition: 'rejected', targetStep: 'rejection-path' },
-        ],
-      });
-
-      const config = createMockConfig({
-        id: 'branching-workflow',
-        steps: [
-          step1,
-          createMockStep({ id: 'approval-path', handler: 'approvalHandler' }),
-          createMockStep({ id: 'rejection-path', handler: 'rejectionHandler' }),
-        ],
-        initialStep: 'decision-step',
-      });
-
-      const decisionHandler = createMockHandler({ decision: 'approved' });
-      const approvalHandler = createMockHandler();
-      const rejectionHandler = createMockHandler();
-
-      engine.registerHandler('decisionHandler', decisionHandler);
-      engine.registerHandler('approvalHandler', approvalHandler);
-      engine.registerHandler('rejectionHandler', rejectionHandler);
-
-      await engine.registerWorkflow(config);
-      await engine.execute(config.id, createMockContext());
-
-      expect(approvalHandler.execute).toHaveBeenCalled();
-      expect(rejectionHandler.execute).not.toHaveBeenCalled();
-    });
-
-    it('should execute step validation before execution', async () => {
-      const step = createMockStep({
-        id: 'validated-step',
-        handler: 'validatedHandler',
-      });
-
-      const handler = createMockHandler();
-      handler.validate = vi.fn().mockResolvedValue(false); // Validation fails
-
-      engine.registerHandler('validatedHandler', handler);
-
-      const config = createMockConfig({
-        id: 'validation-workflow',
-        steps: [step],
-      });
-
-      await engine.registerWorkflow(config);
-
-      await expect(engine.execute(config.id, createMockContext())).rejects.toThrow(
-        WorkflowValidationError
-      );
-
-      expect(handler.validate).toHaveBeenCalled();
-      expect(handler.execute).not.toHaveBeenCalled();
-    });
-
-    it('should support parallel step execution', async () => {
-      const config = createMockConfig({
-        id: 'parallel-workflow',
-        steps: [
-          createMockStep({
-            id: 'fork-step',
-            handler: 'forkHandler',
-            parallel: true,
-            parallelSteps: ['parallel-1', 'parallel-2', 'parallel-3'],
-          }),
-          createMockStep({ id: 'parallel-1', handler: 'handler1' }),
-          createMockStep({ id: 'parallel-2', handler: 'handler2' }),
-          createMockStep({ id: 'parallel-3', handler: 'handler3' }),
-          createMockStep({ id: 'join-step', handler: 'joinHandler' }),
-        ],
-      });
-
-      const handlers = {
-        forkHandler: createMockHandler(),
-        handler1: createMockHandler({ result: 1 }),
-        handler2: createMockHandler({ result: 2 }),
-        handler3: createMockHandler({ result: 3 }),
-        joinHandler: createMockHandler(),
+        name: 'First Step',
+        execute: jest.fn().mockImplementation(async (ctx) => {
+          executionOrder.push('step-1');
+          return { success: true, data: { step: 1 } };
+        }),
       };
 
-      Object.entries(handlers).forEach(([name, handler]) => {
-        engine.registerHandler(name, handler);
+      const step2: WorkflowStep = {
+        id: 'step-2',
+        name: 'Second Step',
+        execute: jest.fn().mockImplementation(async (ctx) => {
+          executionOrder.push('step-2');
+          return { success: true, data: { step: 2 } };
+        }),
+      };
+
+      const step3: WorkflowStep = {
+        id: 'step-3',
+        name: 'Third Step',
+        execute: jest.fn().mockImplementation(async (ctx) => {
+          executionOrder.push('step-3');
+          return { success: true, data: { step: 3 } };
+        }),
+      };
+
+      engine.registerStep(step1);
+      engine.registerStep(step2);
+      engine.registerStep(step3);
+
+      const context: WorkflowContext = {
+        workflowId: 'sequential-workflow',
+        input: {},
+      };
+
+      // Act
+      const result = await engine.executeWorkflow(['step-1', 'step-2', 'step-3'], context);
+
+      // Assert
+      expect(executionOrder).toEqual(['step-1', 'step-2', 'step-3']);
+      expect(result.success).toBe(true);
+      expect(result.stepResults).toHaveLength(3);
+    });
+
+    it('should pass context with previous step results to subsequent steps', async () => {
+      // Arrange
+      const step1: WorkflowStep = {
+        id: 'data-producer',
+        name: 'Data Producer',
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          data: { producedValue: 'important-data' },
+        }),
+      };
+
+      const step2: WorkflowStep = {
+        id: 'data-consumer',
+        name: 'Data Consumer',
+        execute: jest.fn().mockImplementation(async (ctx, stepContext) => {
+          // Access previous step results from stepContext
+          const previousResults = stepContext.getPreviousResults();
+          return {
+            success: true,
+            data: { received: previousResults['data-producer']?.data },
+          };
+        }),
+      };
+
+      engine.registerStep(step1);
+      engine.registerStep(step2);
+
+      const context: WorkflowContext = {
+        workflowId: 'context-test',
+        input: { initial: 'data' },
+      };
+
+      // Act
+      const result = await engine.executeWorkflow(['data-producer', 'data-consumer'], context);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.stepResults[1].data).toEqual({
+        received: { producedValue: 'important-data' },
       });
+    });
 
-      await engine.registerWorkflow(config);
-      const result = await engine.execute(config.id, createMockContext());
+    it('should stop execution on step failure when continueOnError is false', async () => {
+      // Arrange
+      const step1: WorkflowStep = {
+        id: 'success-step',
+        name: 'Success Step',
+        execute: jest.fn().mockResolvedValue({ success: true }),
+      };
 
-      // All parallel handlers should be called
-      expect(handlers.handler1.execute).toHaveBeenCalled();
-      expect(handlers.handler2.execute).toHaveBeenCalled();
-      expect(handlers.handler3.execute).toHaveBeenCalled();
+      const step2: WorkflowStep = {
+        id: 'failing-step',
+        name: 'Failing Step',
+        execute: jest.fn().mockRejectedValue(new Error('Step failed')),
+      };
 
-      // Join step should receive aggregated results
-      expect(handlers.joinHandler.execute).toHaveBeenCalledWith(
+      const step3: WorkflowStep = {
+        id: 'never-executed',
+        name: 'Never Executed',
+        execute: jest.fn().mockResolvedValue({ success: true }),
+      };
+
+      engine.registerStep(step1);
+      engine.registerStep(step2);
+      engine.registerStep(step3);
+
+      const context: WorkflowContext = {
+        workflowId: 'failure-test',
+        input: {},
+        options: { continueOnError: false },
+      };
+
+      // Act
+      const result = await engine.executeWorkflow(['success-step', 'failing-step', 'never-executed'], context);
+
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.stepResults).toHaveLength(2); // Third step should not execute
+      expect(step3.execute).not.toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Workflow step failing-step failed'),
+        expect.any(Error)
+      );
+    });
+
+    it('should continue execution on step failure when continueOnError is true', async () => {
+      // Arrange
+      const step1: WorkflowStep = {
+        id: 'step-a',
+        name: 'Step A',
+        execute: jest.fn().mockResolvedValue({ success: true }),
+      };
+
+      const step2: WorkflowStep = {
+        id: 'failing-step',
+        name: 'Failing Step',
+        execute: jest.fn().mockRejectedValue(new Error('Step failed')),
+      };
+
+      const step3: WorkflowStep = {
+        id: 'step-b',
+        name: 'Step B',
+        execute: jest.fn().mockResolvedValue({ success: true }),
+      };
+
+      engine.registerStep(step1);
+      engine.registerStep(step2);
+      engine.registerStep(step3);
+
+      const context: WorkflowContext = {
+        workflowId: 'continue-test',
+        input: {},
+        options: { continueOnError: true },
+      };
+
+      // Act
+      const result = await engine.executeWorkflow(['step-a', 'failing-step', 'step-b'], context);
+
+      // Assert
+      expect(result.success).toBe(false); // Overall workflow still reports failure
+      expect(result.stepResults).toHaveLength(3); // All steps executed
+      expect(step3.execute).toHaveBeenCalled();
+    });
+
+    it('should throw WorkflowError when step is not registered', async () => {
+      // Arrange
+      const context: WorkflowContext = {
+        workflowId: 'missing-step-test',
+        input: {},
+      };
+
+      // Act & Assert
+      await expect(
+        engine.executeWorkflow(['non-existent-step'], context)
+      ).rejects.toThrow(WorkflowError);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Workflow step not found: non-existent-step'
+      );
+    });
+
+    it('should throw ValidationError for empty step list', async () => {
+      // Arrange
+      const context: WorkflowContext = {
+        workflowId: 'empty-workflow',
+        input: {},
+      };
+
+      // Act & Assert
+      await expect(engine.executeWorkflow([], context)).rejects.toThrow(ValidationError);
+    });
+
+    it('should apply timeout from step configuration', async () => {
+      // Arrange
+      const slowStep: WorkflowStep = {
+        id: 'slow-step',
+        name: 'Slow Step',
+        timeout: 100, // 100ms timeout
+        execute: jest.fn().mockImplementation(
+          () => new Promise((resolve) => setTimeout(resolve, 200))
+        ),
+      };
+
+      engine.registerStep(slowStep);
+
+      const context: WorkflowContext = {
+        workflowId: 'timeout-test',
+        input: {},
+      };
+
+      // Act & Assert
+      await expect(
+        engine.executeWorkflow(['slow-step'], context)
+      ).rejects.toThrow(WorkflowError);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Workflow step slow-step timed out after 100ms')
+      );
+    });
+
+    it('should support conditional step execution based on context', async () => {
+      // Arrange
+      const conditionalStep: WorkflowStep = {
+        id: 'conditional-step',
+        name: 'Conditional Step',
+        condition: (ctx) => ctx.input.shouldRun === true,
+        execute: jest.fn().mockResolvedValue({ success: true }),
+      };
+
+      const alwaysRunStep: WorkflowStep = {
+        id: 'always-run',
+        name: 'Always Run',
+        execute: jest.fn().mockResolvedValue({ success: true }),
+      };
+
+      engine.registerStep(conditionalStep);
+      engine.registerStep(alwaysRunStep);
+
+      // Act - condition is false
+      const skipResult = await engine.executeWorkflow(
+        ['conditional-step', 'always-run'],
+        { workflowId: 'skip-test', input: { shouldRun: false } }
+      );
+
+      // Assert
+      expect(conditionalStep.execute).not.toHaveBeenCalled();
+      expect(skipResult.stepResults).toHaveLength(1);
+      expect(skipResult.stepResults[0].stepId).toBe('always-run');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Skipping step conditional-step: condition not met'
+      );
+
+      // Act - condition is true
+      jest.clearAllMocks();
+      const runResult = await engine.executeWorkflow(
+        ['conditional-step', 'always-run'],
+        { workflowId: 'run-test', input: { shouldRun: true } }
+      );
+
+      // Assert
+      expect(conditionalStep.execute).toHaveBeenCalled();
+      expect(runResult.stepResults).toHaveLength(2);
+    });
+
+    it('should handle step retry logic on failure', async () => {
+      // Arrange
+      let attemptCount = 0;
+      const flakyStep: WorkflowStep = {
+        id: 'flaky-step',
+        name: 'Flaky Step',
+        retryCount: 2,
+        retryDelay: 10, // 10ms for fast tests
+        execute: jest.fn().mockImplementation(async () => {
+          attemptCount++;
+          if (attemptCount < 3) {
+            throw new Error(`Attempt ${attemptCount} failed`);
+          }
+          return { success: true, data: { attempts: attemptCount } };
+        }),
+      };
+
+      engine.registerStep(flakyStep);
+
+      const context: WorkflowContext = {
+        workflowId: 'retry-test',
+        input: {},
+      };
+
+      // Act
+      const result = await engine.executeWorkflow(['flaky-step'], context);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(attemptCount).toBe(3);
+      expect(flakyStep.execute).toHaveBeenCalledTimes(3);
+      expect(mockLogger.warn).toHaveBeenCalledTimes(2); // Two retry warnings
+    });
+
+    it('should fail after exhausting all retries', async () => {
+      // Arrange
+      const failingStep: WorkflowStep = {
+        id: 'always-fails',
+        name: 'Always Fails',
+        retryCount: 2,
+        retryDelay: 5,
+        execute: jest.fn().mockRejectedValue(new Error('Persistent failure')),
+      };
+
+      engine.registerStep(failingStep);
+
+      const context: WorkflowContext = {
+        workflowId: 'exhausted-retry-test',
+        input: {},
+      };
+
+      // Act
+      const result = await engine.executeWorkflow(['always-fails'], context);
+
+      // Assert
+      expect(result.success).toBe(false);
+      expect(failingStep.execute).toHaveBeenCalledTimes(3); // Initial + 2 retries
+      expect(result.stepResults[0].error).toContain('Persistent failure');
+    });
+
+    it('should properly clean up resources on workflow completion', async () => {
+      // Arrange
+      const cleanupMock = jest.fn();
+      const stepWithCleanup: WorkflowStep = {
+        id: 'cleanup-step',
+        name: 'Cleanup Step',
+        execute: jest.fn().mockResolvedValue({ success: true }),
+        cleanup: cleanupMock,
+      };
+
+      engine.registerStep(stepWithCleanup);
+
+      const context: WorkflowContext = {
+        workflowId: 'cleanup-test',
+        input: {},
+      };
+
+      // Act
+      await engine.executeWorkflow(['cleanup-step'], context);
+
+      // Assert
+      expect(cleanupMock).toHaveBeenCalled();
+    });
+
+    it('should execute cleanup even when step fails', async () => {
+      // Arrange
+      const cleanupMock = jest.fn();
+      const failingStepWithCleanup: WorkflowStep = {
+        id: 'failing-with-cleanup',
+        name: 'Failing With Cleanup',
+        execute: jest.fn().mockRejectedValue(new Error('Execution failed')),
+        cleanup: cleanupMock,
+      };
+
+      engine.registerStep(failingStepWithCleanup);
+
+      const context: WorkflowContext = {
+        workflowId: 'cleanup-on-failure-test',
+        input: {},
+      };
+
+      // Act
+      await engine.executeWorkflow(['failing-with-cleanup'], context);
+
+      // Assert
+      expect(cleanupMock).toHaveBeenCalled();
+    });
+
+    it('should track workflow execution metrics', async () => {
+      // Arrange
+      const step: WorkflowStep = {
+        id: 'metrics-step',
+        name: 'Metrics Step',
+        execute: jest.fn().mockImplementation(async () => {
+          // Simulate some work
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return { success: true };
+        }),
+      };
+
+      engine.registerStep(step);
+
+      const context: WorkflowContext = {
+        workflowId: 'metrics-test',
+        input: {},
+      };
+
+      // Act
+      const startTime = Date.now();
+      const result = await engine.executeWorkflow(['metrics-step'], context);
+      const endTime = Date.now();
+
+      // Assert
+      expect(result.metrics).toBeDefined();
+      expect(result.metrics?.totalDuration).toBeGreaterThanOrEqual(10);
+      expect(result.metrics?.totalDuration).toBeLessThanOrEqual(endTime - startTime + 50); // Allow some buffer
+      expect(result.metrics?.stepCount).toBe(1);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Workflow metrics-test completed'),
         expect.objectContaining({
-          parallelResults: expect.arrayContaining([
-            expect.objectContaining({ result: expect.any(Number) }),
-          ]),
+          duration: expect.any(Number),
+          success: true,
         })
       );
     });
   });
 
-  // ===========================================================================
-  // Layer 5: Runtime - Execution Environment and Error Handling
-  // ===========================================================================
-
-  describe('Runtime Layer', () => {
-    it('should handle step execution errors with retry logic', async () => {
-      const step = createMockStep({
-        id: 'flaky-step',
-        handler: 'flakyHandler',
-        retryPolicy: {
-          maxAttempts: 3,
-          backoffMs: 100,
-          retryableErrors: ['TransientError'],
-        },
-      });
-
-      const handler = createMockHandler();
-      let attemptCount = 0;
-
-      handler.execute = vi.fn().mockImplementation(async () => {
-        attemptCount++;
-        if (attemptCount < 3) {
-          const error = new Error('Transient failure');
-          error.name = 'TransientError';
-          throw error;
-        }
-        return { success: true };
-      });
-
-      engine.registerHandler('flakyHandler', handler);
-
-      const config = createMockConfig({
-        id: 'retry-workflow',
-        steps: [step],
-      });
-
-      await engine.registerWorkflow(config);
-      const result = await engine.execute(config.id, createMockContext());
-
-      expect(attemptCount).toBe(3);
-      expect(handler.execute).toHaveBeenCalledTimes(3);
-      expect(result.success).toBe(true);
+  describe('WorkflowContext validation', () => {
+    it('should validate required context fields', () => {
+      // Arrange & Act & Assert
+      expect(() => {
+        // Missing workflowId
+        const invalidContext = {
+          input: {},
+        } as WorkflowContext;
+        engine.validateContext(invalidContext);
+      }).toThrow(ValidationError);
     });
 
-    it('should execute rollback on failure when configured', async () => {
-      const step1 = createMockStep({
-        id: 'step-1',
-        handler: 'compensatableHandler',
-        compensatingStep: 'rollback-1',
+    it('should apply default options when not provided', () => {
+      // Arrange
+      const context: WorkflowContext = {
+        workflowId: 'test',
+        input: {},
+        // options not provided
+      };
+
+      // Act
+      const validatedContext = engine.validateContext(context);
+
+      // Assert
+      expect(validatedContext.options).toEqual({
+        continueOnError: false,
+        timeout: 30000,
+        maxConcurrency: 1,
       });
-
-      const step2 = createMockStep({
-        id: 'step-2',
-        handler: 'failingHandler',
-      });
-
-      const config = createMockConfig({
-        id: 'saga-workflow',
-        steps: [step1, step2],
-      });
-
-      const compensatableHandler = createMockHandler();
-      const rollbackHandler = createMockHandler();
-      const failingHandler = createMockHandler();
-
-      failingHandler.execute = vi.fn().mockRejectedValue(new Error('Step failed'));
-
-      engine.registerHandler('compensatableHandler', compensatableHandler);
-      engine.registerHandler('rollback-1', rollbackHandler);
-      engine.registerHandler('failingHandler', failingHandler);
-
-      await engine.registerWorkflow(config);
-
-      await expect(engine.execute(config.id, createMockContext())).rejects.toThrow();
-
-      // Rollback should be executed for completed steps
-      expect(rollbackHandler.execute).toHaveBeenCalled();
-    });
-
-    it('should enforce step timeout', async () => {
-      const step = createMockStep({
-        id: 'slow-step',
-        handler: 'slowHandler',
-        timeoutMs: 100, // 100ms timeout
-      });
-
-      const handler = createMockHandler();
-      handler.execute = vi.fn().mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 500)) // Takes 500ms
-      );
-
-      engine.registerHandler('slowHandler', handler);
-
-      const config = createMockConfig({
-        id: 'timeout-workflow',
-        steps: [step],
-      });
-
-      await engine.registerWorkflow(config);
-
-      await expect(engine.execute(config.id, createMockContext())).rejects.toThrow(
-        WorkflowExecutionError
-      );
-    });
-
-    it('should handle unexpected errors gracefully', async () => {
-      const config = createMockConfig();
-      
-      // Simulate internal engine error
-      vi.spyOn(engine as unknown as { validateConfig: () => void }, 'validateConfig').mockImplementation(() => {
-        throw new Error('Unexpected internal error');
-      });
-
-      await expect(engine.registerWorkflow(config)).rejects.toThrow(WorkflowError);
-    });
-
-    it('should support workflow cancellation', async () => {
-      const config = createMockConfig({
-        id: 'cancellable-workflow',
-        steps: [
-          createMockStep({ id: 'long-step', handler: 'longHandler' }),
-        ],
-      });
-
-      const handler = createMockHandler();
-      handler.execute = vi.fn().mockImplementation(async (ctx: WorkflowContext) => {
-        // Check for cancellation signal
-        if (ctx.signals?.cancelled) {
-          throw new Error('Workflow cancelled');
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        return { completed: true };
-      });
-
-      engine.registerHandler('longHandler', handler);
-
-      await engine.registerWorkflow(config);
-
-      const executionPromise = engine.execute(config.id, createMockContext());
-
-      // Cancel after 50ms
-      setTimeout(() => engine.cancel('cancellable-workflow', 'exec-123'), 50);
-
-      await expect(executionPromise).rejects.toThrow('cancelled');
     });
   });
 
-  // ===========================================================================
-  // Layer 6: UI - Result Formatting and Observability
-  // ===========================================================================
+  describe('getWorkflowStatus', () => {
+    it('should return status for running workflow', async () => {
+      // Arrange
+      const slowStep: WorkflowStep = {
+        id: 'very-slow-step',
+        name: 'Very Slow Step',
+        execute: jest.fn().mockImplementation(
+          () => new Promise((resolve) => setTimeout(resolve, 1000))
+        ),
+      };
 
-  describe('UI Layer', () => {
-    it('should return structured workflow result', async () => {
-      const config = createMockConfig({
-        id: 'result-workflow',
-        steps: [createMockStep({ id: 'final-step', handler: 'resultHandler' })],
-      });
+      engine.registerStep(slowStep);
 
-      const handler = createMockHandler({
-        output: { processedData: 'value', count: 42 },
-      });
+      const context: WorkflowContext = {
+        workflowId: 'status-test',
+        input: {},
+      };
 
-      engine.registerHandler('resultHandler', handler);
+      // Start workflow but don't await
+      const workflowPromise = engine.executeWorkflow(['very-slow-step'], context);
 
-      await engine.registerWorkflow(config);
-      const result: WorkflowResult = await engine.execute(config.id, createMockContext());
+      // Act
+      const status = engine.getWorkflowStatus('status-test');
 
-      expect(result).toMatchObject({
-        success: true,
-        workflowId: config.id,
-        executionId: expect.any(String),
-        finalState: expect.any(Object),
-        completedAt: expect.any(Date),
-        metrics: {
-          durationMs: expect.any(Number),
-          stepsExecuted: expect.any(Number),
-        },
-      });
+      // Assert
+      expect(status).toBeDefined();
+      expect(status?.state).toBe('running');
+      expect(status?.currentStepId).toBe('very-slow-step');
+
+      // Cleanup
+      await workflowPromise.catch(() => {}); // Ignore result
     });
 
-    it('should provide execution progress events', async () => {
-      const progressEvents: Array<{ stepId: string; status: string }> = [];
+    it('should return undefined for non-existent workflow', () => {
+      // Act
+      const status = engine.getWorkflowStatus('non-existent');
 
-      const config = createMockConfig({
-        id: 'progress-workflow',
-        steps: [
-          createMockStep({ id: 'step-1', handler: 'handler1' }),
-          createMockStep({ id: 'step-2', handler: 'handler2' }),
-        ],
-      });
-
-      engine.onProgress((event) => {
-        progressEvents.push({
-          stepId: event.stepId,
-          status: event.status,
-        });
-      });
-
-      engine.registerHandler('handler1', createMockHandler());
-      engine.registerHandler('handler2', createMockHandler());
-
-      await engine.registerWorkflow(config);
-      await engine.execute(config.id, createMockContext());
-
-      expect(progressEvents).toHaveLength(4); // 2 steps × 2 events (start, complete)
-      expect(progressEvents[0]).toEqual({ stepId: 'step-1', status: 'started' });
-      expect(progressEvents[progressEvents.length - 1]).toEqual({
-        stepId: 'step-2',
-        status: 'completed',
-      });
-    });
-
-    it('should format error results for UI consumption', async () => {
-      const config = createMockConfig({
-        id: 'error-workflow',
-        steps: [createMockStep({ id: 'error-step', handler: 'errorHandler' })],
-      });
-
-      const handler = createMockHandler();
-      handler.execute = vi.fn().mockRejectedValue(
-        new WorkflowExecutionError('Processing failed', 'error-step', new Error('DB error'))
-      );
-
-      engine.registerHandler('errorHandler', handler);
-
-      await engine.registerWorkflow(config);
-
-      try {
-        await engine.execute(config.id, createMockContext());
-      } catch (error) {
-        // Error should be structured for UI display
-        expect(error).toMatchObject({
-          message: expect.stringContaining('Processing failed'),
-          stepId: 'error-step',
-          recoverable: expect.any(Boolean),
-          suggestedAction: expect.any(String),
-        });
-      }
-    });
-
-    it('should support execution tracing for debugging', async () => {
-      const config = createMockConfig({
-        id: 'traceable-workflow',
-        steps: [createMockStep({ id: 'traced-step', handler: 'tracedHandler' })],
-      });
-
-      engine.enableTracing(true);
-
-      const handler = createMockHandler({ result: 'data' });
-      engine.registerHandler('tracedHandler', handler);
-
-      await engine.registerWorkflow(config);
-      const result = await engine.execute(config.id, createMockContext());
-
-      expect(result.trace).toBeDefined();
-      expect(result.trace).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            timestamp: expect.any(Date),
-            stepId: expect.any(String),
-            durationMs: expect.any(Number),
-            input: expect.any(Object),
-            output: expect.any(Object),
-          }),
-        ])
-      );
+      // Assert
+      expect(status).toBeUndefined();
     });
   });
 
-  // ===========================================================================
-  // Edge Cases and Integration Tests
-  // ===========================================================================
+  describe('cancelWorkflow', () => {
+    it('should cancel a running workflow', async () => {
+      // Arrange
+      const step: WorkflowStep = {
+        id: 'cancellable-step',
+        name: 'Cancellable Step',
+        execute: jest.fn().mockImplementation(async (ctx, stepCtx) => {
+          // Check for cancellation signal
+          while (!stepCtx.isCancelled()) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          throw new Error('Workflow was cancelled');
+        }),
+      };
 
-  describe('Edge Cases', () => {
-    it('should handle empty workflow (single step)', async () => {
-      const config = createMockConfig({
-        id: 'minimal-workflow',
-        steps: [createMockStep({ id: 'only-step', handler: 'simpleHandler' })],
-      });
+      engine.registerStep(step);
 
-      engine.registerHandler('simpleHandler', createMockHandler({ done: true }));
+      const context: WorkflowContext = {
+        workflowId: 'cancel-test',
+        input: {},
+      };
 
-      await engine.registerWorkflow(config);
-      const result = await engine.execute(config.id, createMockContext());
+      // Start workflow
+      const workflowPromise = engine.executeWorkflow(['cancellable-step'], context);
 
-      expect(result.success).toBe(true);
-      expect(result.metrics.stepsExecuted).toBe(1);
+      // Small delay to ensure workflow starts
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Act
+      const cancelled = engine.cancelWorkflow('cancel-test');
+
+      // Assert
+      expect(cancelled).toBe(true);
+
+      const result = await workflowPromise;
+      expect(result.success).toBe(false);
+      expect(result.cancelled).toBe(true);
     });
 
-    it('should handle circular workflow detection', async () => {
-      const config = createMockConfig({
-        id: 'circular-workflow',
-        steps: [
-          createMockStep({
-            id: 'a',
-            handler: 'handlerA',
-            transitions: [{ condition: 'loop', targetStep: 'b' }],
-          }),
-          createMockStep({
-            id: 'b',
-            handler: 'handlerB',
-            transitions: [{ condition: 'back', targetStep: 'a' }],
-          }),
-        ],
-        initialStep: 'a',
-      });
+    it('should return false when cancelling non-existent workflow', () => {
+      // Act
+      const cancelled = engine.cancelWorkflow('non-existent');
 
-      await expect(engine.registerWorkflow(config)).rejects.toThrow(
-        WorkflowValidationError
-      );
-    });
-
-    it('should handle deeply nested workflow execution', async () => {
-      const depth = 10;
-      const steps: WorkflowStep[] = [];
-
-      for (let i = 0; i < depth; i++) {
-        steps.push(
-          createMockStep({
-            id: `deep-step-${i}`,
-            handler: `deepHandler${i}`,
-            transitions:
-              i < depth - 1 ? [{ condition: 'next', targetStep: `deep-step-${i + 1}` }] : [],
-          })
-        );
-      }
-
-      const config = createMockConfig({
-        id: 'deep-workflow',
-        steps,
-        initialStep: 'deep-step-0',
-      });
-
-      steps.forEach((step, i) => {
-        engine.registerHandler(
-          `deepHandler${i}`,
-          createMockHandler({ level: i })
-        );
-      });
-
-      await engine.registerWorkflow(config);
-      const result = await engine.execute(config.id, createMockContext());
-
-      expect(result.success).toBe(true);
-      expect(result.metrics.stepsExecuted).toBe(depth);
-    });
-
-    it('should handle concurrent workflow executions', async () => {
-      const config = createMockConfig({
-        id: 'concurrent-workflow',
-        steps: [createMockStep({ id: 'concurrent-step', handler: 'concurrentHandler' })],
-      });
-
-      let concurrentExecutions = 0;
-      let maxConcurrent = 0;
-
-      const handler = createMockHandler();
-      handler.execute = vi.fn().mockImplementation(async () => {
-        concurrentExecutions++;
-        maxConcurrent = Math.max(maxConcurrent, concurrentExecutions);
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        concurrentExecutions--;
-        return { executed: true };
-      });
-
-      engine.registerHandler('concurrentHandler', handler);
-      await engine.registerWorkflow(config);
-
-      // Execute 5 workflows concurrently
-      const executions = Array(5)
-        .fill(null)
-        .map((_, i) =>
-          engine.execute(config.id, createMockContext({ executionId: `exec-${i}` }))
-        );
-
-      await Promise.all(executions);
-
-      expect(maxConcurrent).toBeGreaterThan(1);
-      expect(handler.execute).toHaveBeenCalledTimes(5);
-    });
-
-    it('should sanitize sensitive data in logs and results', async () => {
-      const config = createMockConfig({
-        id: 'sensitive-workflow',
-        steps: [createMockStep({ id: 'auth-step', handler: 'authHandler' })],
-      });
-
-      const handler = createMockHandler({
-        token: 'secret-token-123',
-        password: 'hunter2',
-        user: { name: 'John', ssn: '123-45-6789' },
-      });
-
-      engine.registerHandler('authHandler', handler);
-
-      await engine.registerWorkflow(config);
-      const result = await engine.execute(
-        config.id,
-        createMockContext({ input: { apiKey: 'sk-live-abc123' } })
-      );
-
-      // Verify sensitive fields are redacted
-      const resultStr = JSON.stringify(result);
-      expect(resultStr).not.toContain('secret-token-123');
-      expect(resultStr).not.toContain('hunter2');
-      expect(resultStr).not.toContain('123-45-6789');
-      expect(resultStr).not.toContain('sk-live-abc123');
+      // Assert
+      expect(cancelled).toBe(false);
     });
   });
 });
