@@ -1,279 +1,211 @@
 /**
- * trends/core.ts
- *
- * Base types and enums for the Trends feature.
- * Layer: Types (Layer 1 of 6)
- *
- * This module defines the foundational type definitions used throughout
- * the Trends system. All types are immutable and validated at runtime
- * where applicable.
+ * @file src/lib/types/trends/core.ts
+ * @description Base types and enums for the Trends feature
+ * @module Types/Trends
  */
 
 import { z } from 'zod';
-import { Result, ok, err } from 'neverthrow';
 
-// =============================================================================
+// ============================================================================
 // Enums
-// =============================================================================
+// ============================================================================
 
 /**
- * Time granularity for trend data aggregation.
- * Determines the bucket size for time-series queries.
- */
-export enum TimeGranularity {
-  MINUTE = 'minute',
-  HOUR = 'hour',
-  DAY = 'day',
-  WEEK = 'week',
-  MONTH = 'month',
-  QUARTER = 'quarter',
-  YEAR = 'year',
-}
-
-/**
- * Trend direction indicator for change analysis.
+ * Enum representing the possible trend directions
  */
 export enum TrendDirection {
-  UP = 'up',
-  DOWN = 'down',
-  FLAT = 'flat',
-  UNKNOWN = 'unknown',
+  UP = 'UP',
+  DOWN = 'DOWN',
+  FLAT = 'FLAT',
+  UNKNOWN = 'UNKNOWN',
 }
 
 /**
- * Status of a trend calculation job.
+ * Enum representing the granularity of trend data points
  */
-export enum TrendJobStatus {
-  PENDING = 'pending',
-  RUNNING = 'running',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  CANCELLED = 'cancelled',
+export enum TrendGranularity {
+  MINUTE = 'MINUTE',
+  HOUR = 'HOUR',
+  DAY = 'DAY',
+  WEEK = 'WEEK',
+  MONTH = 'MONTH',
 }
 
 /**
- * Supported metric types for trend analysis.
+ * Enum representing the status of a trend calculation
  */
-export enum MetricType {
-  COUNT = 'count',
-  SUM = 'sum',
-  AVERAGE = 'average',
-  RATE = 'rate',
-  PERCENTILE = 'percentile',
-  UNIQUE = 'unique',
-}
-
-// =============================================================================
-// Zod Schemas for Runtime Validation
-// =============================================================================
-
-/**
- * Schema for TimeGranularity enum validation.
- */
-export const timeGranularitySchema = z.nativeEnum(TimeGranularity);
-
-/**
- * Schema for TrendDirection enum validation.
- */
-export const trendDirectionSchema = z.nativeEnum(TrendDirection);
-
-/**
- * Schema for TrendJobStatus enum validation.
- */
-export const trendJobStatusSchema = z.nativeEnum(TrendJobStatus);
-
-/**
- * Schema for MetricType enum validation.
- */
-export const metricTypeSchema = z.nativeEnum(MetricType);
-
-/**
- * Schema for timestamp validation ensuring valid Date objects
- * or ISO 8601 strings.
- */
-export const timestampSchema = z.union([
-  z.date(),
-  z.string().datetime({ message: 'Invalid ISO 8601 datetime string' }),
-]).transform((val) => (val instanceof Date ? val : new Date(val)));
-
-/**
- * Schema for non-empty string identifiers.
- */
-export const identifierSchema = z.string()
-  .min(1, 'Identifier cannot be empty')
-  .max(256, 'Identifier exceeds maximum length of 256 characters')
-  .regex(/^[a-zA-Z0-9_-]+$/, 'Identifier contains invalid characters');
-
-// =============================================================================
-// Core Type Definitions
-// =============================================================================
-
-/**
- * Time range specification for trend queries.
- * Invariant: endTime must be greater than or equal to startTime.
- */
-export interface TimeRange {
-  readonly startTime: Date;
-  readonly endTime: Date;
+export enum TrendCalculationStatus {
+  PENDING = 'PENDING',
+  PROCESSING = 'PROCESSING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  STALE = 'STALE',
 }
 
 /**
- * Data point in a time series.
- * Immutable representation of a single observation.
+ * Enum representing the type of metric being tracked
  */
-export interface DataPoint<T = number> {
-  readonly timestamp: Date;
-  readonly value: T;
-  readonly metadata?: Readonly<Record<string, unknown>>;
+export enum TrendMetricType {
+  DEPLOYMENT_FREQUENCY = 'DEPLOYMENT_FREQUENCY',
+  LEAD_TIME = 'LEAD_TIME',
+  CHANGE_FAILURE_RATE = 'CHANGE_FAILURE_RATE',
+  MTTR = 'MTTR',
+  CUSTOM = 'CUSTOM',
+}
+
+// ============================================================================
+// Zod Schemas (for runtime validation)
+// ============================================================================
+
+export const TrendDirectionSchema = z.nativeEnum(TrendDirection);
+export const TrendGranularitySchema = z.nativeEnum(TrendGranularity);
+export const TrendCalculationStatusSchema = z.nativeEnum(TrendCalculationStatus);
+export const TrendMetricTypeSchema = z.nativeEnum(TrendMetricType);
+
+/**
+ * Schema for validating trend data points
+ */
+export const TrendDataPointSchema = z.object({
+  timestamp: z.date().or(z.string().datetime()),
+  value: z.number(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/**
+ * Schema for validating trend series
+ */
+export const TrendSeriesSchema = z.object({
+  id: z.string().uuid(),
+  metricType: TrendMetricTypeSchema,
+  granularity: TrendGranularitySchema,
+  dataPoints: z.array(TrendDataPointSchema).min(1),
+  startDate: z.date().or(z.string().datetime()),
+  endDate: z.date().or(z.string().datetime()),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/**
+ * Schema for validating trend analysis results
+ */
+export const TrendAnalysisSchema = z.object({
+  seriesId: z.string().uuid(),
+  direction: TrendDirectionSchema,
+  changePercentage: z.number().min(-100).max(100),
+  confidence: z.number().min(0).max(1),
+  status: TrendCalculationStatusSchema,
+  calculatedAt: z.date().or(z.string().datetime()),
+  errorMessage: z.string().optional(),
+});
+
+// ============================================================================
+// TypeScript Types (derived from schemas)
+// ============================================================================
+
+export type TrendDataPoint = z.infer<typeof TrendDataPointSchema>;
+export type TrendSeries = z.infer<typeof TrendSeriesSchema>;
+export type TrendAnalysis = z.infer<typeof TrendAnalysisSchema>;
+
+/**
+ * Configuration options for trend calculations
+ */
+export interface TrendCalculationConfig {
+  /** The granularity of data points */
+  granularity: TrendGranularity;
+  /** Number of data points to include in the analysis window */
+  windowSize: number;
+  /** Minimum number of data points required for valid analysis */
+  minDataPoints: number;
+  /** Threshold for considering a change significant (percentage) */
+  significanceThreshold: number;
+  /** Whether to include outlier detection */
+  enableOutlierDetection: boolean;
+  /** Optional custom metadata */
+  metadata?: Record<string, unknown>;
 }
 
 /**
- * Complete time series with metadata.
+ * Input parameters for fetching trend data
  */
-export interface TimeSeries<T = number> {
-  readonly metricName: string;
-  readonly granularity: TimeGranularity;
-  readonly points: ReadonlyArray<DataPoint<T>>;
-  readonly createdAt: Date;
+export interface TrendFetchParams {
+  /** The metric type to fetch */
+  metricType: TrendMetricType;
+  /** Start of the time range */
+  startDate: Date;
+  /** End of the time range */
+  endDate: Date;
+  /** Desired granularity */
+  granularity: TrendGranularity;
+  /** Optional filters */
+  filters?: Record<string, string | string[]>;
 }
 
 /**
- * Trend analysis result containing computed statistics.
+ * Error types specific to trend operations
  */
-export interface TrendAnalysis {
-  readonly direction: TrendDirection;
-  readonly changePercent: number;
-  readonly absoluteChange: number;
-  readonly slope: number;
-  readonly confidence: number; // 0.0 to 1.0
-  readonly sampleSize: number;
-}
-
-/**
- * Configuration for a trend calculation job.
- */
-export interface TrendJobConfig {
-  readonly jobId: string;
-  readonly metricType: MetricType;
-  readonly timeRange: TimeRange;
-  readonly granularity: TimeGranularity;
-  readonly filters?: Readonly<Record<string, unknown>>;
-  readonly percentile?: number; // Required when metricType is PERCENTILE
-}
-
-/**
- * Complete trend job with status and results.
- */
-export interface TrendJob {
-  readonly config: TrendJobConfig;
-  readonly status: TrendJobStatus;
-  readonly createdAt: Date;
-  readonly startedAt?: Date;
-  readonly completedAt?: Date;
-  readonly errorMessage?: string;
-  readonly result?: TrendAnalysis;
-}
-
-// =============================================================================
-// Branded Types for Type Safety
-// =============================================================================
-
-/**
- * Branded type for job identifiers to prevent accidental mixing
- * with other string identifiers.
- */
-export type JobId = string & { readonly __brand: 'JobId' };
-
-/**
- * Branded type for metric names to ensure compile-time validation.
- */
-export type MetricName = string & { readonly __brand: 'MetricName' };
-
-/**
- * Factory function to create a validated JobId.
- * Returns Result to enforce error handling at call sites.
- */
-export function createJobId(value: string): Result<JobId, Error> {
-  const result = identifierSchema.safeParse(value);
-  if (!result.success) {
-    return err(new Error(`Invalid JobId: ${result.error.message}`));
+export class TrendError extends Error {
+  constructor(
+    message: string,
+    public readonly code: TrendErrorCode,
+    public readonly context?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'TrendError';
+    Object.setPrototypeOf(this, TrendError.prototype);
   }
-  return ok(result.data as JobId);
 }
 
 /**
- * Factory function to create a validated MetricName.
- * Returns Result to enforce error handling at call sites.
+ * Error codes for trend operations
  */
-export function createMetricName(value: string): Result<MetricName, Error> {
-  const result = identifierSchema.safeParse(value);
-  if (!result.success) {
-    return err(new Error(`Invalid MetricName: ${result.error.message}`));
-  }
-  return ok(result.data as MetricName);
-}
-
-// =============================================================================
-// Utility Types
-// =============================================================================
-
-/**
- * Generic type for paginated trend results.
- */
-export interface PaginatedResult<T> {
-  readonly data: ReadonlyArray<T>;
-  readonly totalCount: number;
-  readonly pageSize: number;
-  readonly pageNumber: number;
-  readonly hasMore: boolean;
-}
-
-/**
- * Error types specific to the Trends domain.
- */
-export enum TrendsErrorCode {
-  INVALID_TIME_RANGE = 'INVALID_TIME_RANGE',
-  INVALID_GRANULARITY = 'INVALID_GRANULARITY',
+export enum TrendErrorCode {
+  INVALID_INPUT = 'INVALID_INPUT',
   INSUFFICIENT_DATA = 'INSUFFICIENT_DATA',
   CALCULATION_FAILED = 'CALCULATION_FAILED',
-  JOB_NOT_FOUND = 'JOB_NOT_FOUND',
-  RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
+  TIMEOUT = 'TIMEOUT',
+  NOT_FOUND = 'NOT_FOUND',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+}
+
+// ============================================================================
+// Utility Types
+// ============================================================================
+
+/**
+ * Type for trend comparison results (period-over-period)
+ */
+export interface TrendComparison {
+  currentPeriod: TrendSeries;
+  previousPeriod: TrendSeries;
+  analysis: TrendAnalysis;
+  comparisonPercentage: number;
 }
 
 /**
- * Structured error type for trend operations.
+ * Type for paginated trend results
  */
-export interface TrendsError {
-  readonly code: TrendsErrorCode;
-  readonly message: string;
-  readonly context?: Readonly<Record<string, unknown>>;
-  readonly timestamp: Date;
+export interface PaginatedTrends<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 
-// =============================================================================
-// Constants
-// =============================================================================
+/**
+ * Union type for all trend-related entities
+ */
+export type TrendEntity = TrendDataPoint | TrendSeries | TrendAnalysis;
 
 /**
- * Maximum time range allowed for a single trend query.
- * Prevents excessive resource consumption.
+ * Type guard to check if a value is a valid TrendDirection
  */
-export const MAX_TIME_RANGE_DAYS = 365;
+export function isTrendDirection(value: unknown): value is TrendDirection {
+  return Object.values(TrendDirection).includes(value as TrendDirection);
+}
 
 /**
- * Default confidence threshold for trend significance.
+ * Type guard to check if a value is a valid TrendGranularity
  */
-export const DEFAULT_CONFIDENCE_THRESHOLD = 0.95;
-
-/**
- * Supported granularities in ascending order of duration.
- */
-export const GRANULARITY_ORDER: readonly TimeGranularity[] = [
-  TimeGranularity.MINUTE,
-  TimeGranularity.HOUR,
-  TimeGranularity.DAY,
-  TimeGranularity.WEEK,
-  TimeGranularity.MONTH,
-  TimeGranularity.QUARTER,
-  TimeGranularity.YEAR,
-] as const;
+export function isTrendGranularity(value: unknown): value is TrendGranularity {
+  return Object.values(TrendGranularity).includes(value as TrendGranularity);
+}

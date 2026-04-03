@@ -1,9 +1,9 @@
 {
-  "timestamp": 1775187563763,
+  "timestamp": 1775188163776,
   "currentTask": {
-    "id": "evolution-longfile-1775186705187-ls6ow",
-    "title": "Refactor long file: page.test.tsx",
-    "description": "File src\\app\\page.test.tsx has 350 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 350 lines\n  Location: src\\app\\page.test.tsx\n\n📁 Related Files:\n- src\\app\\page.test.tsx",
+    "id": "evolution-longfile-1775186705188-x2b0r",
+    "title": "Refactor long file: trends.ts",
+    "description": "File src\\lib\\types\\trends.ts has 790 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 790 lines\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
     "requirements": [
       "Identify cohesive groups of functionality",
       "Extract into separate modules",
@@ -14,36 +14,21 @@
     "category": "technical_debt",
     "maxDuration": 3600000,
     "createdAt": "2026-04-03T03:25:05.229Z",
-    "startedAt": "2026-04-03T03:31:28.075Z"
+    "startedAt": "2026-04-03T03:43:25.612Z"
   },
   "stats": {
     "completed": 0,
-    "failed": 10,
+    "failed": 11,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
-    "failed": 4,
+    "failed": 5,
     "escalated": 0,
     "startTime": 1775185463716
   },
   "queueState": {
     "queue": [
-      {
-        "id": "evolution-longfile-1775186705188-x2b0r",
-        "title": "Refactor long file: trends.ts",
-        "description": "File src\\lib\\types\\trends.ts has 790 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 790 lines\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
-        "requirements": [
-          "Identify cohesive groups of functionality",
-          "Extract into separate modules",
-          "Update imports"
-        ],
-        "priority": "medium",
-        "status": "pending",
-        "category": "technical_debt",
-        "maxDuration": 3600000,
-        "createdAt": "2026-04-03T03:25:05.229Z"
-      },
       {
         "id": "evolution-longfile-1775186705189-yheup",
         "title": "Refactor long file: orchestrator.ts",
@@ -62,9 +47,9 @@
     ],
     "activeTasks": [
       {
-        "id": "evolution-longfile-1775186705187-ls6ow",
-        "title": "Refactor long file: page.test.tsx",
-        "description": "File src\\app\\page.test.tsx has 350 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 350 lines\n  Location: src\\app\\page.test.tsx\n\n📁 Related Files:\n- src\\app\\page.test.tsx",
+        "id": "evolution-longfile-1775186705188-x2b0r",
+        "title": "Refactor long file: trends.ts",
+        "description": "File src\\lib\\types\\trends.ts has 790 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 790 lines\n  Location: src\\lib\\types\\trends.ts\n\n📁 Related Files:\n- src\\lib\\types\\trends.ts",
         "requirements": [
           "Identify cohesive groups of functionality",
           "Extract into separate modules",
@@ -75,7 +60,7 @@
         "category": "technical_debt",
         "maxDuration": 3600000,
         "createdAt": "2026-04-03T03:25:05.229Z",
-        "startedAt": "2026-04-03T03:31:28.075Z"
+        "startedAt": "2026-04-03T03:43:25.612Z"
       }
     ]
   },
