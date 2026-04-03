@@ -1,36 +1,20 @@
 /**
- * @fileoverview Trend Data Source Types
+ * @fileoverview Trend Data Source Types - Re-export from consolidated types
  * 
- * @deprecated This file has been deprecated. Please use the new trend types from
- * `@harness-engineering/trends-types` package or the consolidated types in
- * `src/types/trends/index.ts` instead.
- * 
- * This module will be removed in version 3.0.0.
+ * This file now re-exports from the consolidated types location.
+ * Please update imports to use `src/types/trends/index.ts` directly.
  * 
  * Layer: Types (Layer 1)
- * Dependencies: None (base types)
+ * Dependencies: `src/types/trends/index.ts`
  */
 
-import { z } from 'zod';
+// Re-export all types from the consolidated location for backwards compatibility
+export * from '../types/trends/index';
 
+// This file is kept as a shim for backwards compatibility.
+// It will be removed in version 3.0.0.
 // Migration guide: https://docs.harness-engineering.io/migrations/trends-types
-
-// ============================================================================
-// Core Trend Types
-// ============================================================================
-
-/**
- * Represents the granularity of trend data points.
- * Used to control the resolution of time-series data.
- *
- * @deprecated Use `TrendGranularity` from `@harness-engineering/trends-types` instead.
- * This will be removed in version 3.0.0.
- */
-export enum TrendGranularity {
-  MINUTE = 'minute',
-  HOURLY = 'hourly',
-  DAILY = 'daily',
-  WEEKLY = 'weekly',
+WEEKLY = 'weekly',
   MONTHLY = 'monthly',
 }
 

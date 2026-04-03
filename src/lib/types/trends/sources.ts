@@ -1,504 +1,320 @@
 /**
- * @fileoverview Data source related types for the Trends module
+ * @fileoverview Data source types for the Trends module
  * @module lib/types/trends/sources
  * 
- * This file defines the core type definitions for trend data sources,
- * following the six-layer architecture (Types → Config → Repo → Service → Runtime → UI).
+ * This file defines the type contracts for data sources used in trend analysis.
+ * Following the six-layer architecture, these types represent the foundational
+ * contracts that all trend data sources must implement.
  */
 
 import { z } from 'zod';
-import { Result, ok, err } from 'neverthrow';
+import { Result, ValidationError } from '../common';
 
-// =============================================================================
-// Domain Types (Layer 1: Types)
-// =============================================================================
+// ============================================================================
+// Base Types
+// ============================================================================
 
 /**
  * Unique identifier for a data source
- * @example "github-prs", "jira-issues", "sonar-coverage"
  */
-export type DataSourceId = string & { readonly __brand: unique symbol };
+export type DataSourceId = string & { readonly __brand: 'DataSourceId' };
 
 /**
- * Branding function for DataSourceId to ensure type safety
+ * Supported data source types
  */
-export function createDataSourceId(id: string): Result<DataSourceId, DataSourceValidationError> {
-  if (!id || id.trim().length === 0) {
-    return err(new DataSourceValidationError('DataSourceId cannot be empty'));
-  }
-  
-  if (!/^[a-z0-9-]+$/.test(id)) {
-    return err(new DataSourceValidationError(
-      'DataSourceId must contain only lowercase letters, numbers, and hyphens'
-    ));
-  }
-  
-  return ok(id as DataSourceId);
+export enum DataSourceType {
+  METRICS = 'metrics',
+  LOGS = 'logs',
+  TRACES = 'traces',
+  EVENTS = 'events',
+  CUSTOM = 'custom',
 }
 
 /**
- * Supported data source categories
+ * Time range for data queries
  */
-export enum DataSourceCategory {
-  /** Version control and code repository data */
-  VERSION_CONTROL = 'VERSION_CONTROL',
-  /** Issue tracking and project management */
-  ISSUE_TRACKING = 'ISSUE_TRACKING',
-  /** Continuous integration and deployment metrics */
-  CI_CD = 'CI_CD',
-  /** Code quality and security scanning */
-  QUALITY = 'QUALITY',
-  /** Infrastructure and deployment data */
-  INFRASTRUCTURE = 'INFRASTRUCTURE',
-  /** Custom or third-party integrations */
-  CUSTOM = 'CUSTOM',
+export interface TimeRange {
+  readonly startTime: number; // Unix timestamp in milliseconds
+  readonly endTime: number;   // Unix timestamp in milliseconds
 }
 
 /**
- * Authentication methods supported by data sources
+ * Granularity options for trend aggregation
  */
-export enum AuthMethod {
-  /** No authentication required */
-  NONE = 'NONE',
-  /** API key based authentication */
-  API_KEY = 'API_KEY',
-  /** OAuth 2.0 flow */
-  OAUTH2 = 'OAUTH2',
-  /** Personal access token */
-  PAT = 'PAT',
-  /** Certificate-based authentication */
-  CERTIFICATE = 'CERTIFICATE',
-  /** Basic username/password */
-  BASIC = 'BASIC',
+export enum Granularity {
+  MINUTE = 'minute',
+  HOUR = 'hour',
+  DAY = 'day',
+  WEEK = 'week',
+  MONTH = 'month',
+}
+
+// ============================================================================
+// Configuration Types
+// ============================================================================
+
+/**
+ * Base configuration for all data sources
+ */
+export interface BaseDataSourceConfig {
+  readonly id: DataSourceId;
+  readonly type: DataSourceType;
+  readonly name: string;
+  readonly description?: string;
+  readonly enabled: boolean;
+  readonly timeoutMs: number;
+  readonly retryPolicy: RetryPolicy;
 }
 
 /**
- * Connection status of a data source
+ * Retry policy configuration
  */
-export enum ConnectionStatus {
-  /** Connection not yet established */
-  PENDING = 'PENDING',
-  /** Successfully connected and operational */
-  CONNECTED = 'CONNECTED',
-  /** Connection failed or broken */
-  FAILED = 'FAILED',
-  /** Connection is being established */
-  CONNECTING = 'CONNECTING',
-  /** Connection temporarily disabled */
-  DISABLED = 'DISABLED',
-}
-
-// =============================================================================
-// Core Data Structures
-// =============================================================================
-
-/**
- * Configuration for data source authentication
- */
-export interface AuthConfig {
-  /** Authentication method to use */
-  method: AuthMethod;
-  /** Encrypted credentials reference (never store plain text) */
-  credentialsRef: string;
-  /** Optional: Token expiry timestamp for OAuth flows */
-  expiresAt?: Date;
-  /** Optional: Required scopes/permissions */
-  scopes?: string[];
+export interface RetryPolicy {
+  readonly maxAttempts: number;
+  readonly backoffMultiplier: number;
+  readonly initialDelayMs: number;
+  readonly maxDelayMs: number;
 }
 
 /**
- * Rate limiting configuration for data source API calls
+ * Metrics-specific data source configuration
  */
-export interface RateLimitConfig {
-  /** Maximum requests per time window */
-  maxRequests: number;
-  /** Time window in seconds */
-  windowSeconds: number;
-  /** Current remaining quota (runtime value) */
-  remaining?: number;
-  /** Reset timestamp (runtime value) */
-  resetAt?: Date;
+export interface MetricsDataSourceConfig extends BaseDataSourceConfig {
+  readonly type: DataSourceType.METRICS;
+  readonly endpoint: string;
+  readonly queryFormat: 'promql' | 'mql' | 'custom';
+  readonly aggregationFunctions: readonly string[];
 }
 
 /**
- * Schema definition for data source fields
- * Used for validation and UI generation
+ * Logs-specific data source configuration
  */
-export interface FieldSchema {
-  /** Field identifier */
-  name: string;
-  /** Human-readable label */
-  label: string;
-  /** Data type of the field */
-  type: 'string' | 'number' | 'boolean' | 'date' | 'array' | 'object';
-  /** Whether the field is required */
-  required: boolean;
-  /** Optional description for documentation */
-  description?: string;
-  /** Default value if not provided */
-  defaultValue?: unknown;
-  /** Validation constraints */
-  constraints?: {
-    min?: number;
-    max?: number;
-    pattern?: string;
-    enum?: unknown[];
-  };
+export interface LogsDataSourceConfig extends BaseDataSourceConfig {
+  readonly type: DataSourceType.LOGS;
+  readonly indexPattern: string;
+  readonly logLevels: readonly string[];
+  readonly fieldMappings: Record<string, string>;
 }
 
 /**
- * Core data source definition
+ * Union type for all data source configurations
  */
-export interface DataSource {
-  /** Unique identifier */
-  id: DataSourceId;
-  /** Display name */
-  name: string;
-  /** Detailed description */
-  description: string;
-  /** Category classification */
-  category: DataSourceCategory;
-  /** Authentication configuration */
-  auth: AuthConfig;
-  /** API endpoint base URL */
-  baseUrl: string;
-  /** Rate limiting settings */
-  rateLimit: RateLimitConfig;
-  /** Available fields/schemas for this data source */
-  schemas: FieldSchema[];
-  /** Whether the data source is active */
-  isActive: boolean;
-  /** Creation timestamp */
-  createdAt: Date;
-  /** Last update timestamp */
-  updatedAt: Date;
-  /** Version for optimistic locking */
-  version: number;
+export type DataSourceConfig = 
+  | MetricsDataSourceConfig 
+  | LogsDataSourceConfig
+  | BaseDataSourceConfig;
+
+// ============================================================================
+// Query Types
+// ============================================================================
+
+/**
+ * Base query parameters for trend data retrieval
+ */
+export interface BaseTrendQuery {
+  readonly dataSourceId: DataSourceId;
+  readonly timeRange: TimeRange;
+  readonly granularity: Granularity;
+  readonly filters?: ReadonlyArray<QueryFilter>;
 }
 
 /**
- * Data source with runtime connection information
+ * Filter condition for queries
  */
-export interface DataSourceRuntime extends DataSource {
-  /** Current connection status */
-  connectionStatus: ConnectionStatus;
-  /** Last successful connection timestamp */
-  lastConnectedAt?: Date;
-  /** Last error message if connection failed */
-  lastError?: string;
-  /** Health check score (0-100) */
-  healthScore: number;
-  /** Cached metadata from last fetch */
-  cachedMetadata?: Record<string, unknown>;
-}
-
-// =============================================================================
-// Input/Output Types for Service Layer
-// =============================================================================
-
-/**
- * Input for creating a new data source
- */
-export interface CreateDataSourceInput {
-  name: string;
-  description: string;
-  category: DataSourceCategory;
-  auth: Omit<AuthConfig, 'credentialsRef'> & { credentials: string };
-  baseUrl: string;
-  rateLimit: Omit<RateLimitConfig, 'remaining' | 'resetAt'>;
-  schemas?: FieldSchema[];
+export interface QueryFilter {
+  readonly field: string;
+  readonly operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains';
+  readonly value: unknown;
 }
 
 /**
- * Input for updating an existing data source
+ * Metrics-specific query parameters
  */
-export interface UpdateDataSourceInput {
-  name?: string;
-  description?: string;
-  category?: DataSourceCategory;
-  auth?: Partial<Omit<AuthConfig, 'credentialsRef'>> & { credentials?: string };
-  baseUrl?: string;
-  rateLimit?: Partial<Omit<RateLimitConfig, 'remaining' | 'resetAt'>>;
-  schemas?: FieldSchema[];
-  isActive?: boolean;
+export interface MetricsTrendQuery extends BaseTrendQuery {
+  readonly metricName: string;
+  readonly aggregation: 'avg' | 'sum' | 'min' | 'max' | 'count' | 'p99' | 'p95';
+  readonly groupBy?: readonly string[];
 }
 
 /**
- * Query parameters for listing data sources
+ * Logs-specific query parameters
  */
-export interface DataSourceListQuery {
-  /** Filter by category */
-  category?: DataSourceCategory;
-  /** Filter by connection status */
-  status?: ConnectionStatus;
-  /** Search by name or description */
-  search?: string;
-  /** Include inactive sources */
-  includeInactive?: boolean;
-  /** Pagination: page number (1-based) */
-  page?: number;
-  /** Pagination: items per page */
-  limit?: number;
-  /** Sort field */
-  sortBy?: 'name' | 'createdAt' | 'updatedAt' | 'category';
-  /** Sort direction */
-  sortOrder?: 'asc' | 'desc';
+export interface LogsTrendQuery extends BaseTrendQuery {
+  readonly searchQuery: string;
+  readonly severityLevels?: readonly string[];
+  readonly includeFields?: readonly string[];
 }
 
 /**
- * Paginated result for data source queries
+ * Union type for all trend queries
  */
-export interface DataSourceListResult {
-  /** Data sources matching the query */
-  items: DataSourceRuntime[];
-  /** Total count without pagination */
-  total: number;
-  /** Current page number */
-  page: number;
-  /** Items per page */
-  limit: number;
-  /** Total number of pages */
-  totalPages: number;
+export type TrendQuery = MetricsTrendQuery | LogsTrendQuery | BaseTrendQuery;
+
+// ============================================================================
+// Result Types
+// ============================================================================
+
+/**
+ * A single data point in a trend series
+ */
+export interface TrendDataPoint {
+  readonly timestamp: number;
+  readonly value: number;
+  readonly metadata?: Record<string, unknown>;
 }
 
-// =============================================================================
+/**
+ * A named series of trend data points
+ */
+export interface TrendSeries {
+  readonly name: string;
+  readonly label: string;
+  readonly dataPoints: ReadonlyArray<TrendDataPoint>;
+  readonly unit?: string;
+  readonly color?: string;
+}
+
+/**
+ * Complete result from a trend data query
+ */
+export interface TrendQueryResult {
+  readonly queryId: string;
+  readonly executedAt: number;
+  readonly executionTimeMs: number;
+  readonly series: ReadonlyArray<TrendSeries>;
+  readonly totalDataPoints: number;
+  readonly truncated: boolean;
+  readonly metadata: QueryResultMetadata;
+}
+
+/**
+ * Metadata about query execution
+ */
+export interface QueryResultMetadata {
+  readonly dataSourceId: DataSourceId;
+  readonly queryTimeRange: TimeRange;
+  readonly actualTimeRange: TimeRange;
+  readonly sampleRate?: number;
+  readonly warnings?: ReadonlyArray<string>;
+}
+
+// ============================================================================
 // Error Types
-// =============================================================================
+// ============================================================================
 
 /**
- * Base error class for data source operations
+ * Error codes specific to data source operations
  */
-export class DataSourceError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly isRetryable: boolean = false
-  ) {
-    super(message);
-    this.name = 'DataSourceError';
-    Object.setPrototypeOf(this, DataSourceError.prototype);
-  }
+export enum DataSourceErrorCode {
+  CONNECTION_FAILED = 'CONNECTION_FAILED',
+  QUERY_TIMEOUT = 'QUERY_TIMEOUT',
+  INVALID_QUERY = 'INVALID_QUERY',
+  RATE_LIMITED = 'RATE_LIMITED',
+  DATA_NOT_FOUND = 'DATA_NOT_FOUND',
+  CONFIGURATION_ERROR = 'CONFIGURATION_ERROR',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
 }
 
 /**
- * Validation error for data source inputs
+ * Structured error for data source operations
  */
-export class DataSourceValidationError extends DataSourceError {
-  constructor(message: string) {
-    super(message, 'DATA_SOURCE_VALIDATION_ERROR', false);
-    this.name = 'DataSourceValidationError';
-    Object.setPrototypeOf(this, DataSourceValidationError.prototype);
-  }
+export interface DataSourceError {
+  readonly code: DataSourceErrorCode;
+  readonly message: string;
+  readonly dataSourceId: DataSourceId;
+  readonly retryable: boolean;
+  readonly timestamp: number;
+  readonly details?: Record<string, unknown>;
 }
 
-/**
- * Connection error for data source operations
- */
-export class DataSourceConnectionError extends DataSourceError {
-  constructor(
-    message: string,
-    public readonly statusCode?: number,
-    public readonly responseBody?: unknown
-  ) {
-    super(message, 'DATA_SOURCE_CONNECTION_ERROR', true);
-    this.name = 'DataSourceConnectionError';
-    Object.setPrototypeOf(this, DataSourceConnectionError.prototype);
-  }
-}
+// ============================================================================
+// Interface Contracts
+// ============================================================================
 
 /**
- * Not found error when data source doesn't exist
+ * Contract that all trend data sources must implement
+ * This is the core abstraction for the Repository layer
  */
-export class DataSourceNotFoundError extends DataSourceError {
-  constructor(dataSourceId: DataSourceId) {
-    super(
-      `Data source with id '${dataSourceId}' not found`,
-      'DATA_SOURCE_NOT_FOUND',
-      false
-    );
-    this.name = 'DataSourceNotFoundError';
-    Object.setPrototypeOf(this, DataSourceNotFoundError.prototype);
-  }
-}
-
-/**
- * Conflict error for duplicate data sources
- */
-export class DataSourceConflictError extends DataSourceError {
-  constructor(dataSourceId: DataSourceId) {
-    super(
-      `Data source with id '${dataSourceId}' already exists`,
-      'DATA_SOURCE_CONFLICT',
-      false
-    );
-    this.name = 'DataSourceConflictError';
-    Object.setPrototypeOf(this, DataSourceConflictError.prototype);
-  }
-}
-
-// =============================================================================
-// Zod Schemas for Runtime Validation
-// =============================================================================
-
-/**
- * Zod schema for AuthConfig validation
- */
-export const AuthConfigSchema = z.object({
-  method: z.nativeEnum(AuthMethod),
-  credentialsRef: z.string().min(1),
-  expiresAt: z.date().optional(),
-  scopes: z.array(z.string()).optional(),
-});
-
-/**
- * Zod schema for RateLimitConfig validation
- */
-export const RateLimitConfigSchema = z.object({
-  maxRequests: z.number().int().positive(),
-  windowSeconds: z.number().int().positive(),
-  remaining: z.number().int().nonnegative().optional(),
-  resetAt: z.date().optional(),
-});
-
-/**
- * Zod schema for FieldSchema validation
- */
-export const FieldSchemaSchema = z.object({
-  name: z.string().min(1).regex(/^[a-zA-Z][a-zA-Z0-9_]*$/),
-  label: z.string().min(1),
-  type: z.enum(['string', 'number', 'boolean', 'date', 'array', 'object']),
-  required: z.boolean(),
-  description: z.string().optional(),
-  defaultValue: z.unknown().optional(),
-  constraints: z.object({
-    min: z.number().optional(),
-    max: z.number().optional(),
-    pattern: z.string().optional(),
-    enum: z.array(z.unknown()).optional(),
-  }).optional(),
-});
-
-/**
- * Zod schema for DataSource validation
- */
-export const DataSourceSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1).max(100),
-  description: z.string().max(500),
-  category: z.nativeEnum(DataSourceCategory),
-  auth: AuthConfigSchema,
-  baseUrl: z.string().url(),
-  rateLimit: RateLimitConfigSchema,
-  schemas: z.array(FieldSchemaSchema),
-  isActive: z.boolean(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  version: z.number().int().nonnegative(),
-});
-
-/**
- * Zod schema for CreateDataSourceInput validation
- */
-export const CreateDataSourceInputSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().max(500),
-  category: z.nativeEnum(DataSourceCategory),
-  auth: z.object({
-    method: z.nativeEnum(AuthMethod),
-    credentials: z.string().min(1),
-    expiresAt: z.date().optional(),
-    scopes: z.array(z.string()).optional(),
-  }),
-  baseUrl: z.string().url(),
-  rateLimit: z.object({
-    maxRequests: z.number().int().positive(),
-    windowSeconds: z.number().int().positive(),
-  }),
-  schemas: z.array(FieldSchemaSchema).optional(),
-});
-
-/**
- * Zod schema for UpdateDataSourceInput validation
- */
-export const UpdateDataSourceInputSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
-  category: z.nativeEnum(DataSourceCategory).optional(),
-  auth: z.object({
-    method: z.nativeEnum(AuthMethod).optional(),
-    credentials: z.string().min(1).optional(),
-    expiresAt: z.date().optional(),
-    scopes: z.array(z.string()).optional(),
-  }).optional(),
-  baseUrl: z.string().url().optional(),
-  rateLimit: z.object({
-    maxRequests: z.number().int().positive().optional(),
-    windowSeconds: z.number().int().positive().optional(),
-  }).optional(),
-  schemas: z.array(FieldSchemaSchema).optional(),
-  isActive: z.boolean().optional(),
-});
-
-/**
- * Validates and parses CreateDataSourceInput with detailed error handling
- */
-export function validateCreateDataSourceInput(
-  input: unknown
-): Result<CreateDataSourceInput, DataSourceValidationError> {
-  const result = CreateDataSourceInputSchema.safeParse(input);
+export interface ITrendDataSource {
+  /** Unique identifier for this data source instance */
+  readonly id: DataSourceId;
   
-  if (!result.success) {
-    const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ');
-    return err(new DataSourceValidationError(`Invalid input: ${issues}`));
-  }
-  
-  return ok(result.data);
+  /** Configuration for this data source */
+  readonly config: DataSourceConfig;
+
+  /**
+   * Validates that the data source is properly configured and reachable
+   * @returns Result indicating health status or error details
+   */
+  validate(): Promise<Result<void, DataSourceError>>;
+
+  /**
+   * Executes a trend query against this data source
+   * @param query - The query parameters
+   * @returns Result containing trend data or error details
+   */
+  query(query: TrendQuery): Promise<Result<TrendQueryResult, DataSourceError>>;
+
+  /**
+   * Retrieves available metrics/fields from this data source
+   * @returns Result containing available fields or error details
+   */
+  getAvailableFields(): Promise<Result<ReadonlyArray<string>, DataSourceError>>;
 }
 
-/**
- * Validates and parses UpdateDataSourceInput with detailed error handling
- */
-export function validateUpdateDataSourceInput(
-  input: unknown
-): Result<UpdateDataSourceInput, DataSourceValidationError> {
-  const result = UpdateDataSourceInputSchema.safeParse(input);
-  
-  if (!result.success) {
-    const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ');
-    return err(new DataSourceValidationError(`Invalid input: ${issues}`));
-  }
-  
-  return ok(result.data);
-}
+// ============================================================================
+// Validation Schemas (for runtime validation)
+// ============================================================================
 
-// =============================================================================
+export const timeRangeSchema = z.object({
+  startTime: z.number().int().positive(),
+  endTime: z.number().int().positive(),
+}).refine(
+  (data) => data.startTime < data.endTime,
+  { message: 'startTime must be less than endTime' }
+);
+
+export const queryFilterSchema = z.object({
+  field: z.string().min(1),
+  operator: z.enum(['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'in', 'contains']),
+  value: z.unknown(),
+});
+
+export const baseTrendQuerySchema = z.object({
+  dataSourceId: z.string().min(1),
+  timeRange: timeRangeSchema,
+  granularity: z.nativeEnum(Granularity),
+  filters: z.array(queryFilterSchema).optional(),
+});
+
+// ============================================================================
 // Type Guards
-// =============================================================================
+// ============================================================================
 
 /**
- * Type guard to check if value is a valid DataSourceCategory
+ * Type guard to check if a query is a metrics query
  */
-export function isDataSourceCategory(value: unknown): value is DataSourceCategory {
-  return Object.values(DataSourceCategory).includes(value as DataSourceCategory);
+export function isMetricsTrendQuery(query: TrendQuery): query is MetricsTrendQuery {
+  return 'metricName' in query && 'aggregation' in query;
 }
 
 /**
- * Type guard to check if value is a valid AuthMethod
+ * Type guard to check if a query is a logs query
  */
-export function isAuthMethod(value: unknown): value is AuthMethod {
-  return Object.values(AuthMethod).includes(value as AuthMethod);
+export function isLogsTrendQuery(query: TrendQuery): query is LogsTrendQuery {
+  return 'searchQuery' in query;
 }
 
 /**
- * Type guard to check if value is a valid ConnectionStatus
+ * Type guard to check if a config is for metrics data source
  */
-export function isConnectionStatus(value: unknown): value is ConnectionStatus {
-  return Object.values(ConnectionStatus).includes(value as ConnectionStatus);
+export function isMetricsDataSourceConfig(config: DataSourceConfig): config is MetricsDataSourceConfig {
+  return config.type === DataSourceType.METRICS;
 }
 
 /**
- * Type guard to check if error is a DataSourceError
+ * Type guard to check if a config is for logs data source
  */
-export function isDataSourceError(error: unknown): error is DataSourceError {
-  return error instanceof DataSourceError;
+export function isLogsDataSourceConfig(config: DataSourceConfig): config is LogsDataSourceConfig {
+  return config.type === DataSourceType.LOGS;
 }
