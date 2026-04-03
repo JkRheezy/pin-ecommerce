@@ -3,532 +3,527 @@
  * 
  * Layer: Config (Layer 2)
  * 
- * This module defines configuration types and validation for the AI orchestrator.
- * It provides type-safe configuration with runtime validation and sensible defaults.
+ * This module provides configuration management for the AI orchestrator,
+ * including validation, defaults, and environment-specific overrides.
  */
 
 import { z } from 'zod';
-import { StructuredLogger } from '@harness/logging';
+import { createLogger } from '@harness/logging';
+import { Result, ok, err } from '@harness/result';
 
-const logger = new StructuredLogger('OrchestratorConfig');
+const logger = createLogger('orchestrator:config');
 
-// ============================================================================
-// Types Layer (Layer 1) - Embedded
-// ============================================================================
-
-/**
- * Supported LLM provider types
- */
-export enum LLMProvider {
-  OPENAI = 'openai',
-  ANTHROPIC = 'anthropic',
-  GOOGLE = 'google',
-  AZURE = 'azure',
-  HARNESS = 'harness',
-}
+// =============================================================================
+// TYPES (Layer 1) - Type definitions for orchestrator configuration
+// =============================================================================
 
 /**
- * Execution strategy for the orchestrator
+ * Provider types supported by the orchestrator
  */
-export enum ExecutionStrategy {
-  SEQUENTIAL = 'sequential',
-  PARALLEL = 'parallel',
-  ADAPTIVE = 'adaptive',
-}
+export type LLMProvider = 'openai' | 'anthropic' | 'google' | 'azure' | 'local';
+
+/**
+ * Execution strategy for tool calling
+ */
+export type ExecutionStrategy = 'sequential' | 'parallel' | 'adaptive';
 
 /**
  * Retry policy configuration
  */
 export interface RetryPolicy {
-  /** Maximum number of retry attempts */
-  maxAttempts: number;
-  /** Initial delay in milliseconds */
-  initialDelayMs: number;
-  /** Maximum delay in milliseconds */
-  maxDelayMs: number;
-  /** Backoff multiplier */
-  backoffMultiplier: number;
-  /** Whether to use jitter */
-  useJitter: boolean;
+  readonly maxAttempts: number;
+  readonly baseDelayMs: number;
+  readonly maxDelayMs: number;
+  readonly backoffMultiplier: number;
+  readonly retryableErrors: ReadonlyArray<string>;
 }
 
 /**
- * Circuit breaker configuration
+ * Circuit breaker configuration for resilience
  */
 export interface CircuitBreakerConfig {
-  /** Failure threshold before opening circuit */
-  failureThreshold: number;
-  /** Recovery timeout in milliseconds */
-  recoveryTimeoutMs: number;
-  /** Half-open request count for testing */
-  halfOpenRequests: number;
+  readonly failureThreshold: number;
+  readonly recoveryTimeoutMs: number;
+  readonly halfOpenMaxCalls: number;
 }
 
 /**
- * LLM-specific configuration
+ * Rate limiting configuration
  */
-export interface LLMConfig {
-  /** Provider type */
-  provider: LLMProvider;
-  /** Model identifier */
-  model: string;
-  /** Maximum tokens to generate */
-  maxTokens: number;
-  /** Temperature for sampling (0-2) */
-  temperature: number;
-  /** Top-p sampling parameter */
-  topP?: number;
-  /** Request timeout in milliseconds */
-  timeoutMs: number;
-  /** Provider-specific API configuration */
-  apiConfig: Record<string, unknown>;
+export interface RateLimitConfig {
+  readonly requestsPerSecond: number;
+  readonly burstSize: number;
+  readonly cooldownMs: number;
 }
 
 /**
- * Orchestrator feature flags
+ * Tool execution configuration
  */
-export interface FeatureFlags {
-  /** Enable streaming responses */
-  enableStreaming: boolean;
-  /** Enable caching of results */
-  enableCaching: boolean;
-  /** Enable request deduplication */
-  enableDeduplication: boolean;
-  /** Enable request tracing */
-  enableTracing: boolean;
-  /** Enable cost tracking */
-  enableCostTracking: boolean;
+export interface ToolConfig {
+  readonly timeoutMs: number;
+  readonly maxConcurrency: number;
+  readonly executionStrategy: ExecutionStrategy;
 }
 
 /**
  * Complete orchestrator configuration
  */
 export interface OrchestratorConfig {
-  /** Unique identifier for this configuration */
-  id: string;
-  /** Human-readable name */
-  name: string;
-  /** Execution strategy */
-  strategy: ExecutionStrategy;
-  /** Primary LLM configuration */
-  primaryLLM: LLMConfig;
-  /** Fallback LLM configuration (optional) */
-  fallbackLLM?: LLMConfig;
-  /** Retry policy */
-  retryPolicy: RetryPolicy;
-  /** Circuit breaker configuration */
-  circuitBreaker: CircuitBreakerConfig;
-  /** Feature flags */
-  features: FeatureFlags;
-  /** Cache TTL in milliseconds (0 = disabled) */
-  cacheTtlMs: number;
-  /** Maximum concurrent requests */
-  maxConcurrentRequests: number;
-  /** Request queue size limit */
-  queueSizeLimit: number;
-  /** Metadata for tracking */
-  metadata: Record<string, string>;
+  readonly provider: LLMProvider;
+  readonly model: string;
+  readonly temperature: number;
+  readonly maxTokens: number;
+  readonly topP: number;
+  readonly frequencyPenalty: number;
+  readonly presencePenalty: number;
+  readonly retryPolicy: RetryPolicy;
+  readonly circuitBreaker: CircuitBreakerConfig;
+  readonly rateLimit: RateLimitConfig;
+  readonly tools: ToolConfig;
+  readonly enableCaching: boolean;
+  readonly cacheTtlMs: number;
+  readonly enableTracing: boolean;
+  readonly logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
-// ============================================================================
-// Validation Schemas (Zod)
-// ============================================================================
+// =============================================================================
+// ZOD SCHEMAS - Runtime validation schemas
+// =============================================================================
 
 const retryPolicySchema = z.object({
   maxAttempts: z.number().int().min(1).max(10).default(3),
-  initialDelayMs: z.number().int().min(0).max(60000).default(1000),
-  maxDelayMs: z.number().int().min(0).max(300000).default(30000),
+  baseDelayMs: z.number().int().min(100).max(60000).default(1000),
+  maxDelayMs: z.number().int().min(1000).max(300000).default(30000),
   backoffMultiplier: z.number().min(1).max(10).default(2),
-  useJitter: z.boolean().default(true),
+  retryableErrors: z.array(z.string()).default(['ECONNRESET', 'ETIMEDOUT', '429', '503']),
 });
 
 const circuitBreakerSchema = z.object({
   failureThreshold: z.number().int().min(1).max(100).default(5),
   recoveryTimeoutMs: z.number().int().min(1000).max(300000).default(30000),
-  halfOpenRequests: z.number().int().min(1).max(10).default(3),
+  halfOpenMaxCalls: z.number().int().min(1).max(10).default(3),
 });
 
-const llmConfigSchema = z.object({
-  provider: z.nativeEnum(LLMProvider),
-  model: z.string().min(1),
-  maxTokens: z.number().int().min(1).max(100000).default(4096),
+const rateLimitSchema = z.object({
+  requestsPerSecond: z.number().min(0.1).max(1000).default(10),
+  burstSize: z.number().int().min(1).max(100).default(20),
+  cooldownMs: z.number().int().min(0).max(60000).default(1000),
+});
+
+const toolConfigSchema = z.object({
+  timeoutMs: z.number().int().min(1000).max(300000).default(30000),
+  maxConcurrency: z.number().int().min(1).max(100).default(5),
+  executionStrategy: z.enum(['sequential', 'parallel', 'adaptive']).default('adaptive'),
+});
+
+const orchestratorConfigSchema = z.object({
+  provider: z.enum(['openai', 'anthropic', 'google', 'azure', 'local']).default('openai'),
+  model: z.string().min(1).default('gpt-4'),
   temperature: z.number().min(0).max(2).default(0.7),
-  topP: z.number().min(0).max(1).optional(),
-  timeoutMs: z.number().int().min(1000).max(300000).default(60000),
-  apiConfig: z.record(z.unknown()).default({}),
-});
-
-const featureFlagsSchema = z.object({
-  enableStreaming: z.boolean().default(false),
-  enableCaching: z.boolean().default(true),
-  enableDeduplication: z.boolean().default(true),
-  enableTracing: z.boolean().default(false),
-  enableCostTracking: z.boolean().default(false),
-});
-
-export const orchestratorConfigSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string().min(1).max(100),
-  strategy: z.nativeEnum(ExecutionStrategy).default(ExecutionStrategy.ADAPTIVE),
-  primaryLLM: llmConfigSchema,
-  fallbackLLM: llmConfigSchema.optional(),
+  maxTokens: z.number().int().min(1).max(128000).default(4096),
+  topP: z.number().min(0).max(1).default(1),
+  frequencyPenalty: z.number().min(-2).max(2).default(0),
+  presencePenalty: z.number().min(-2).max(2).default(0),
   retryPolicy: retryPolicySchema,
   circuitBreaker: circuitBreakerSchema,
-  features: featureFlagsSchema,
-  cacheTtlMs: z.number().int().min(0).default(300000),
-  maxConcurrentRequests: z.number().int().min(1).max(1000).default(10),
-  queueSizeLimit: z.number().int().min(0).max(10000).default(100),
-  metadata: z.record(z.string()).default({}),
+  rateLimit: rateLimitSchema,
+  tools: toolConfigSchema,
+  enableCaching: z.boolean().default(true),
+  cacheTtlMs: z.number().int().min(1000).max(86400000).default(300000),
+  enableTracing: z.boolean().default(false),
+  logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
-// ============================================================================
-// Configuration Builder & Factory
-// ============================================================================
+// =============================================================================
+// DEFAULTS - Sensible default configurations
+// =============================================================================
 
-/**
- * Default configuration values
- */
-export const DEFAULT_CONFIG: Readonly<Partial<OrchestratorConfig>> = {
-  strategy: ExecutionStrategy.ADAPTIVE,
-  retryPolicy: {
-    maxAttempts: 3,
-    initialDelayMs: 1000,
-    maxDelayMs: 30000,
-    backoffMultiplier: 2,
-    useJitter: true,
-  },
-  circuitBreaker: {
-    failureThreshold: 5,
-    recoveryTimeoutMs: 30000,
-    halfOpenRequests: 3,
-  },
-  features: {
-    enableStreaming: false,
-    enableCaching: true,
-    enableDeduplication: true,
-    enableTracing: false,
-    enableCostTracking: false,
-  },
-  cacheTtlMs: 300000,
-  maxConcurrentRequests: 10,
-  queueSizeLimit: 100,
-  metadata: {},
+export const DEFAULT_RETRY_POLICY: RetryPolicy = {
+  maxAttempts: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 30000,
+  backoffMultiplier: 2,
+  retryableErrors: ['ECONNRESET', 'ETIMEDOUT', '429', '503', 'ECONNREFUSED'],
 } as const;
 
+export const DEFAULT_CIRCUIT_BREAKER: CircuitBreakerConfig = {
+  failureThreshold: 5,
+  recoveryTimeoutMs: 30000,
+  halfOpenMaxCalls: 3,
+} as const;
+
+export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
+  requestsPerSecond: 10,
+  burstSize: 20,
+  cooldownMs: 1000,
+} as const;
+
+export const DEFAULT_TOOL_CONFIG: ToolConfig = {
+  timeoutMs: 30000,
+  maxConcurrency: 5,
+  executionStrategy: 'adaptive',
+} as const;
+
+export const DEFAULT_CONFIG: OrchestratorConfig = {
+  provider: 'openai',
+  model: 'gpt-4',
+  temperature: 0.7,
+  maxTokens: 4096,
+  topP: 1,
+  frequencyPenalty: 0,
+  presencePenalty: 0,
+  retryPolicy: DEFAULT_RETRY_POLICY,
+  circuitBreaker: DEFAULT_CIRCUIT_BREAKER,
+  rateLimit: DEFAULT_RATE_LIMIT,
+  tools: DEFAULT_TOOL_CONFIG,
+  enableCaching: true,
+  cacheTtlMs: 300000, // 5 minutes
+  enableTracing: false,
+  logLevel: 'info',
+} as const;
+
+// =============================================================================
+// CONFIGURATION ERRORS
+// =============================================================================
+
+export class ConfigurationError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly details?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'ConfigurationError';
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+// =============================================================================
+// CONFIGURATION BUILDER
+// =============================================================================
+
 /**
- * Configuration builder for fluent configuration construction
+ * Builder class for constructing orchestrator configuration with validation.
+ * Implements the builder pattern for flexible, type-safe configuration.
  */
 export class OrchestratorConfigBuilder {
   private config: Partial<OrchestratorConfig> = {};
 
-  constructor(initialConfig?: Partial<OrchestratorConfig>) {
-    this.config = { ...DEFAULT_CONFIG, ...initialConfig };
-  }
-
-  withId(id: string): this {
-    this.config.id = id;
+  /**
+   * Set the LLM provider
+   */
+  withProvider(provider: LLMProvider): this {
+    this.config = { ...this.config, provider };
     return this;
   }
 
-  withName(name: string): this {
-    this.config.name = name;
+  /**
+   * Set the model identifier
+   */
+  withModel(model: string): this {
+    this.config = { ...this.config, model };
     return this;
   }
 
-  withStrategy(strategy: ExecutionStrategy): this {
-    this.config.strategy = strategy;
+  /**
+   * Set generation parameters
+   */
+  withGenerationParams(params: {
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+  }): this {
+    this.config = { ...this.config, ...params };
     return this;
   }
 
-  withPrimaryLLM(llmConfig: LLMConfig): this {
-    this.config.primaryLLM = llmConfig;
+  /**
+   * Set retry policy configuration
+   */
+  withRetryPolicy(retryPolicy: Partial<RetryPolicy>): this {
+    this.config = {
+      ...this.config,
+      retryPolicy: { ...DEFAULT_RETRY_POLICY, ...this.config.retryPolicy, ...retryPolicy },
+    };
     return this;
   }
 
-  withFallbackLLM(llmConfig: LLMConfig): this {
-    this.config.fallbackLLM = llmConfig;
+  /**
+   * Set circuit breaker configuration
+   */
+  withCircuitBreaker(circuitBreaker: Partial<CircuitBreakerConfig>): this {
+    this.config = {
+      ...this.config,
+      circuitBreaker: { ...DEFAULT_CIRCUIT_BREAKER, ...this.config.circuitBreaker, ...circuitBreaker },
+    };
     return this;
   }
 
-  withRetryPolicy(policy: Partial<RetryPolicy>): this {
-    this.config.retryPolicy = { ...this.config.retryPolicy, ...policy } as RetryPolicy;
+  /**
+   * Set rate limiting configuration
+   */
+  withRateLimit(rateLimit: Partial<RateLimitConfig>): this {
+    this.config = {
+      ...this.config,
+      rateLimit: { ...DEFAULT_RATE_LIMIT, ...this.config.rateLimit, ...rateLimit },
+    };
     return this;
   }
 
-  withCircuitBreaker(config: Partial<CircuitBreakerConfig>): this {
-    this.config.circuitBreaker = { ...this.config.circuitBreaker, ...config } as CircuitBreakerConfig;
+  /**
+   * Set tool execution configuration
+   */
+  withToolConfig(tools: Partial<ToolConfig>): this {
+    this.config = {
+      ...this.config,
+      tools: { ...DEFAULT_TOOL_CONFIG, ...this.config.tools, ...tools },
+    };
     return this;
   }
 
-  withFeatures(features: Partial<FeatureFlags>): this {
-    this.config.features = { ...this.config.features, ...features } as FeatureFlags;
+  /**
+   * Enable or disable caching
+   */
+  withCaching(enabled: boolean, ttlMs?: number): this {
+    this.config = {
+      ...this.config,
+      enableCaching: enabled,
+      ...(ttlMs && { cacheTtlMs: ttlMs }),
+    };
     return this;
   }
 
-  withCacheTtl(ttlMs: number): this {
-    this.config.cacheTtlMs = ttlMs;
+  /**
+   * Enable or disable tracing
+   */
+  withTracing(enabled: boolean): this {
+    this.config = { ...this.config, enableTracing: enabled };
     return this;
   }
 
-  withConcurrency(maxConcurrent: number): this {
-    this.config.maxConcurrentRequests = maxConcurrent;
-    return this;
-  }
-
-  withQueueLimit(limit: number): this {
-    this.config.queueSizeLimit = limit;
-    return this;
-  }
-
-  withMetadata(metadata: Record<string, string>): this {
-    this.config.metadata = { ...this.config.metadata, ...metadata };
+  /**
+   * Set log level
+   */
+  withLogLevel(level: OrchestratorConfig['logLevel']): this {
+    this.config = { ...this.config, logLevel: level };
     return this;
   }
 
   /**
    * Build and validate the final configuration
-   * @throws {ZodError} if validation fails
+   * @returns Result containing valid config or error
    */
-  build(): OrchestratorConfig {
-    const result = orchestratorConfigSchema.safeParse(this.config);
-    
-    if (!result.success) {
-      logger.error('Configuration validation failed', {
-        errors: result.error.errors,
-        config: this.config,
+  build(): Result<OrchestratorConfig, ConfigurationError> {
+    try {
+      // Merge with defaults and validate
+      const mergedConfig = {
+        ...DEFAULT_CONFIG,
+        ...this.config,
+        retryPolicy: { ...DEFAULT_RETRY_POLICY, ...this.config.retryPolicy },
+        circuitBreaker: { ...DEFAULT_CIRCUIT_BREAKER, ...this.config.circuitBreaker },
+        rateLimit: { ...DEFAULT_RATE_LIMIT, ...this.config.rateLimit },
+        tools: { ...DEFAULT_TOOL_CONFIG, ...this.config.tools },
+      };
+
+      const validated = orchestratorConfigSchema.parse(mergedConfig);
+      
+      logger.debug('Orchestrator configuration built successfully', {
+        provider: validated.provider,
+        model: validated.model,
       });
-      throw new ConfigValidationError('Invalid orchestrator configuration', result.error);
+
+      return ok(validated as OrchestratorConfig);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const issues = error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ');
+        const configError = new ConfigurationError(
+          `Configuration validation failed: ${issues}`,
+          'VALIDATION_ERROR',
+          { issues: error.issues }
+        );
+        logger.error('Configuration validation failed', { error: configError });
+        return err(configError);
+      }
+
+      const configError = new ConfigurationError(
+        `Unexpected error building configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'BUILD_ERROR',
+        { originalError: error }
+      );
+      logger.error('Unexpected configuration error', { error: configError });
+      return err(configError);
+    }
+  }
+}
+
+// =============================================================================
+// ENVIRONMENT CONFIGURATION LOADER
+// =============================================================================
+
+/**
+ * Load configuration from environment variables with validation.
+ * Environment variables are prefixed with HARNESS_AI_ORCHESTRATOR_.
+ */
+export function loadConfigFromEnv(): Result<Partial<OrchestratorConfig>, ConfigurationError> {
+  const env = process.env;
+  const config: Partial<OrchestratorConfig> = {};
+
+  try {
+    // Helper to parse numeric env vars
+    const parseNumber = (key: string, min?: number, max?: number): number | undefined => {
+      const value = env[key];
+      if (!value) return undefined;
+      const num = Number(value);
+      if (isNaN(num)) {
+        throw new ConfigurationError(`Invalid numeric value for ${key}: ${value}`, 'ENV_PARSE_ERROR');
+      }
+      if (min !== undefined && num < min) {
+        throw new ConfigurationError(`${key} must be >= ${min}`, 'ENV_RANGE_ERROR');
+      }
+      if (max !== undefined && num > max) {
+        throw new ConfigurationError(`${key} must be <= ${max}`, 'ENV_RANGE_ERROR');
+      }
+      return num;
+    };
+
+    // Helper to parse boolean env vars
+    const parseBool = (key: string): boolean | undefined => {
+      const value = env[key]?.toLowerCase();
+      if (!value) return undefined;
+      if (value === 'true' || value === '1') return true;
+      if (value === 'false' || value === '0') return false;
+      throw new ConfigurationError(`Invalid boolean value for ${key}: ${value}`, 'ENV_PARSE_ERROR');
+    };
+
+    // Parse provider and model
+    const provider = env.HARNESS_AI_ORCHESTRATOR_PROVIDER as LLMProvider | undefined;
+    if (provider) config.provider = provider;
+
+    const model = env.HARNESS_AI_ORCHESTRATOR_MODEL;
+    if (model) config.model = model;
+
+    // Parse generation parameters
+    const temperature = parseNumber('HARNESS_AI_ORCHESTRATOR_TEMPERATURE', 0, 2);
+    if (temperature !== undefined) config.temperature = temperature;
+
+    const maxTokens = parseNumber('HARNESS_AI_ORCHESTRATOR_MAX_TOKENS', 1, 128000);
+    if (maxTokens !== undefined) config.maxTokens = maxTokens;
+
+    // Parse feature flags
+    const enableCaching = parseBool('HARNESS_AI_ORCHESTRATOR_ENABLE_CACHING');
+    if (enableCaching !== undefined) config.enableCaching = enableCaching;
+
+    const enableTracing = parseBool('HARNESS_AI_ORCHESTRATOR_ENABLE_TRACING');
+    if (enableTracing !== undefined) config.enableTracing = enableTracing;
+
+    const cacheTtlMs = parseNumber('HARNESS_AI_ORCHESTRATOR_CACHE_TTL_MS', 1000, 86400000);
+    if (cacheTtlMs !== undefined) config.cacheTtlMs = cacheTtlMs;
+
+    // Parse log level
+    const logLevel = env.HARNESS_AI_ORCHESTRATOR_LOG_LEVEL as OrchestratorConfig['logLevel'] | undefined;
+    if (logLevel) config.logLevel = logLevel;
+
+    // Parse retry policy
+    const retryPolicy: Partial<RetryPolicy> = {};
+    const maxAttempts = parseNumber('HARNESS_AI_ORCHESTRATOR_RETRY_MAX_ATTEMPTS', 1, 10);
+    if (maxAttempts !== undefined) retryPolicy.maxAttempts = maxAttempts;
+
+    const baseDelayMs = parseNumber('HARNESS_AI_ORCHESTRATOR_RETRY_BASE_DELAY_MS', 100, 60000);
+    if (baseDelayMs !== undefined) retryPolicy.baseDelayMs = baseDelayMs;
+
+    if (Object.keys(retryPolicy).length > 0) {
+      config.retryPolicy = retryPolicy as RetryPolicy;
     }
 
-    logger.info('Configuration built successfully', {
-      configId: result.data.id,
-      name: result.data.name,
-      provider: result.data.primaryLLM.provider,
-    });
-
-    return result.data;
+    logger.debug('Configuration loaded from environment', { keys: Object.keys(config) });
+    return ok(config);
+  } catch (error) {
+    if (error instanceof ConfigurationError) {
+      return err(error);
+    }
+    return err(new ConfigurationError(
+      `Failed to load configuration from environment: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      'ENV_LOAD_ERROR',
+      { originalError: error }
+    ));
   }
 }
 
-// ============================================================================
-// Error Types
-// ============================================================================
+// =============================================================================
+// FACTORY FUNCTIONS
+// =============================================================================
 
 /**
- * Configuration validation error
+ * Create a configuration builder instance
  */
-export class ConfigValidationError extends Error {
-  constructor(
-    message: string,
-    public readonly validationError: z.ZodError
-  ) {
-    super(message);
-    this.name = 'ConfigValidationError';
-  }
+export function createConfigBuilder(): OrchestratorConfigBuilder {
+  return new OrchestratorConfigBuilder();
 }
 
 /**
- * Configuration not found error
+ * Create configuration from environment with defaults
  */
-export class ConfigNotFoundError extends Error {
-  constructor(configId: string) {
-    super(`Configuration not found: ${configId}`);
-    this.name = 'ConfigNotFoundError';
-  }
-}
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Validate a partial configuration object
- * Returns validation result without throwing
- */
-export function validatePartialConfig(
-  config: unknown
-): { success: true; data: Partial<OrchestratorConfig> } | { success: false; errors: z.ZodError } {
-  const result = orchestratorConfigSchema.partial().safeParse(config);
+export function createConfigFromEnv(): Result<OrchestratorConfig, ConfigurationError> {
+  const envResult = loadConfigFromEnv();
   
-  if (result.success) {
-    return { success: true, data: result.data };
-  }
-  
-  return { success: false, errors: result.error };
-}
-
-/**
- * Merge configurations with precedence (later configs override earlier ones)
- */
-export function mergeConfigs(
-  ...configs: Array<Partial<OrchestratorConfig>>
-): Partial<OrchestratorConfig> {
-  return configs.reduce((merged, current) => {
-    return {
-      ...merged,
-      ...current,
-      // Deep merge for nested objects
-      retryPolicy: { ...merged.retryPolicy, ...current.retryPolicy },
-      circuitBreaker: { ...merged.circuitBreaker, ...current.circuitBreaker },
-      features: { ...merged.features, ...current.features },
-      primaryLLM: current.primaryLLM 
-        ? { ...merged.primaryLLM, ...current.primaryLLM }
-        : merged.primaryLLM,
-      metadata: { ...merged.metadata, ...current.metadata },
-    };
-  }, {} as Partial<OrchestratorConfig>);
-}
-
-/**
- * Create a safe configuration with environment-based overrides
- */
-export function createSafeConfig(
-  baseConfig: Partial<OrchestratorConfig>
-): OrchestratorConfig {
-  // Apply environment overrides
-  const envOverrides: Partial<OrchestratorConfig> = {
-    features: {
-      enableTracing: process.env.ORCHESTRATOR_ENABLE_TRACING === 'true',
-      enableCostTracking: process.env.ORCHESTRATOR_ENABLE_COST_TRACKING === 'true',
-      enableStreaming: process.env.ORCHESTRATOR_ENABLE_STREAMING === 'true',
-      enableCaching: process.env.ORCHESTRATOR_ENABLE_CACHING !== 'false',
-      enableDeduplication: process.env.ORCHESTRATOR_ENABLE_DEDUPLICATION !== 'false',
-    },
-    maxConcurrentRequests: process.env.ORCHESTRATOR_MAX_CONCURRENT
-      ? parseInt(process.env.ORCHESTRATOR_MAX_CONCURRENT, 10)
-      : undefined,
-    cacheTtlMs: process.env.ORCHESTRATOR_CACHE_TTL_MS
-      ? parseInt(process.env.ORCHESTRATOR_CACHE_TTL_MS, 10)
-      : undefined,
-  };
-
-  const merged = mergeConfigs(DEFAULT_CONFIG, baseConfig, envOverrides);
-  
-  // Ensure required fields are present with defaults
-  const withDefaults: Partial<OrchestratorConfig> = {
-    ...merged,
-    id: merged.id || crypto.randomUUID(),
-    name: merged.name || 'default-orchestrator',
-    primaryLLM: merged.primaryLLM || {
-      provider: LLMProvider.HARNESS,
-      model: 'gpt-4',
-      maxTokens: 4096,
-      temperature: 0.7,
-      timeoutMs: 60000,
-      apiConfig: {},
-    },
-  };
-
-  return new OrchestratorConfigBuilder(withDefaults).build();
-}
-
-/**
- * Serialize configuration for storage (excludes sensitive data)
- */
-export function serializeConfig(config: OrchestratorConfig): string {
-  // Create a sanitized copy without sensitive API keys
-  const sanitized: Partial<OrchestratorConfig> = {
-    ...config,
-    primaryLLM: {
-      ...config.primaryLLM,
-      apiConfig: Object.keys(config.primaryLLM.apiConfig).reduce((acc, key) => {
-        acc[key] = key.toLowerCase().includes('key') || key.toLowerCase().includes('secret')
-          ? '[REDACTED]'
-          : config.primaryLLM.apiConfig[key];
-        return acc;
-      }, {} as Record<string, unknown>),
-    },
-  };
-
-  if (sanitized.fallbackLLM) {
-    sanitized.fallbackLLM = {
-      ...sanitized.fallbackLLM,
-      apiConfig: Object.keys(sanitized.fallbackLLM.apiConfig).reduce((acc, key) => {
-        acc[key] = key.toLowerCase().includes('key') || key.toLowerCase().includes('secret')
-          ? '[REDACTED]'
-          : sanitized.fallbackLLM!.apiConfig[key];
-        return acc;
-      }, {} as Record<string, unknown>),
-    };
+  if (envResult.isErr()) {
+    return err(envResult.error);
   }
 
-  return JSON.stringify(sanitized, null, 2);
+  return createConfigBuilder()
+    .withProvider(envResult.value.provider ?? DEFAULT_CONFIG.provider)
+    .withModel(envResult.value.model ?? DEFAULT_CONFIG.model)
+    .withGenerationParams({
+      temperature: envResult.value.temperature,
+      maxTokens: envResult.value.maxTokens,
+    })
+    .withCaching(
+      envResult.value.enableCaching ?? DEFAULT_CONFIG.enableCaching,
+      envResult.value.cacheTtlMs
+    )
+    .withTracing(envResult.value.enableTracing ?? DEFAULT_CONFIG.enableTracing)
+    .withLogLevel(envResult.value.logLevel ?? DEFAULT_CONFIG.logLevel)
+    .withRetryPolicy(envResult.value.retryPolicy ?? {})
+    .build();
 }
 
-// ============================================================================
-// Predefined Configurations
-// ============================================================================
+/**
+ * Create a development-optimized configuration
+ */
+export function createDevConfig(): OrchestratorConfig {
+  const result = createConfigBuilder()
+    .withProvider('local')
+    .withModel('llama-2-7b')
+    .withGenerationParams({ temperature: 0.9, maxTokens: 2048 })
+    .withCaching(false)
+    .withTracing(true)
+    .withLogLevel('debug')
+    .withRetryPolicy({ maxAttempts: 1 })
+    .build();
+
+  // Dev config should always succeed with these defaults
+  if (result.isErr()) {
+    throw new Error('Failed to create dev config: this should never happen');
+  }
+
+  return result.value;
+}
 
 /**
- * Development configuration with relaxed settings
+ * Create a production-optimized configuration
  */
-export const DEV_CONFIG: Partial<OrchestratorConfig> = {
-  name: 'dev-orchestrator',
-  strategy: ExecutionStrategy.SEQUENTIAL,
-  retryPolicy: {
-    maxAttempts: 1,
-    initialDelayMs: 100,
-    maxDelayMs: 1000,
-    backoffMultiplier: 1,
-    useJitter: false,
-  },
-  features: {
-    enableStreaming: true,
-    enableCaching: false,
-    enableDeduplication: false,
-    enableTracing: true,
-    enableCostTracking: true,
-  },
-  cacheTtlMs: 0,
-  maxConcurrentRequests: 5,
-};
-
-/**
- * Production configuration with conservative settings
- */
-export const PROD_CONFIG: Partial<OrchestratorConfig> = {
-  name: 'prod-orchestrator',
-  strategy: ExecutionStrategy.ADAPTIVE,
-  retryPolicy: {
-    maxAttempts: 3,
-    initialDelayMs: 1000,
-    maxDelayMs: 60000,
-    backoffMultiplier: 2,
-    useJitter: true,
-  },
-  features: {
-    enableStreaming: false,
-    enableCaching: true,
-    enableDeduplication: true,
-    enableTracing: false,
-    enableCostTracking: true,
-  },
-  cacheTtlMs: 600000,
-  maxConcurrentRequests: 50,
-  queueSizeLimit: 500,
-};
-
-/**
- * High-performance configuration for latency-sensitive workloads
- */
-export const HIGH_PERF_CONFIG: Partial<OrchestratorConfig> = {
-  name: 'high-perf-orchestrator',
-  strategy: ExecutionStrategy.PARALLEL,
-  retryPolicy: {
-    maxAttempts: 2,
-    initialDelayMs: 50,
-    maxDelayMs: 5000,
-    backoffMultiplier: 1.5,
-    useJitter: true,
-  },
-  features: {
-    enableStreaming: true,
-    enableCaching: true,
-    enableDeduplication: true,
-    enableTracing: false,
-    enableCostTracking: false,
-  },
-  cacheTtlMs: 60000,
-  maxConcurrentRequests: 100,
-  queueSizeLimit: 1000,
-};
+export function createProdConfig(): Result<OrchestratorConfig, ConfigurationError> {
+  return createConfigBuilder()
+    .withProvider('openai')
+    .withModel('gpt-4')
+    .withGenerationParams({ temperature: 0.3, maxTokens: 4096 })
+    .withCaching(true, 600000) // 10 minute cache
+    .withTracing(false)
+    .withLogLevel('warn')
+    .withRetryPolicy({ maxAttempts: 5, baseDelayMs: 2000 })
+    .withCircuitBreaker({ failureThreshold: 10, recoveryTimeoutMs: 60000 })
+    .withRateLimit({ requestsPerSecond: 50, burstSize: 100 })
+    .build();
+}

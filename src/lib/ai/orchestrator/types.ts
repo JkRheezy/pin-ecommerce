@@ -1,477 +1,456 @@
 /**
- * Types module for AI Orchestrator
- * 
- * This module defines the core types and interfaces for the orchestrator layer,
- * following the six-layer architecture (Types → Config → Repo → Service → Runtime → UI).
+ * Orchestrator Types Module
  * 
  * Layer: Types (Layer 1)
- * Responsibility: Define pure data structures, interfaces, and type guards
+ * Purpose: Define core type definitions and interfaces for the AI orchestrator system.
+ * This module contains no runtime logic - only type definitions, interfaces, and constants.
  */
 
-import type { Logger } from '$lib/logging/types';
-import type { Result } from '$lib/functional/types';
-
 // ============================================================================
-// Core Orchestrator Types
+// Base Types & Enums
 // ============================================================================
 
 /**
- * Unique identifier for an orchestrator instance
+ * Unique identifier for orchestrator entities
  */
-export type OrchestratorId = string & { readonly __brand: 'OrchestratorId' };
+export type OrchestratorId = string;
 
 /**
- * Unique identifier for a workflow execution
+ * Timestamp in ISO 8601 format
  */
-export type WorkflowExecutionId = string & { readonly __brand: 'WorkflowExecutionId' };
+export type ISOTimestamp = string;
 
 /**
- * Unique identifier for a step within a workflow
- */
-export type StepId = string & { readonly __brand: 'StepId' };
-
-/**
- * Unique identifier for a task execution
- */
-export type TaskId = string & { readonly __brand: 'TaskId' };
-
-/**
- * Branded string types for type safety
- */
-export function createOrchestratorId(id: string): OrchestratorId {
-	return id as OrchestratorId;
-}
-
-export function createWorkflowExecutionId(id: string): WorkflowExecutionId {
-	return id as WorkflowExecutionId;
-}
-
-export function createStepId(id: string): StepId {
-	return id as StepId;
-}
-
-export function createTaskId(id: string): TaskId {
-	return id as TaskId;
-}
-
-// ============================================================================
-// Workflow Definition Types
-// ============================================================================
-
-/**
- * Supported workflow types
- */
-export enum WorkflowType {
-	SEQUENTIAL = 'sequential',
-	PARALLEL = 'parallel',
-	CONDITIONAL = 'conditional',
-	LOOP = 'loop',
-	EVENT_DRIVEN = 'event_driven'
-}
-
-/**
- * Execution strategy for handling step failures
- */
-export enum FailureStrategy {
-	FAIL_FAST = 'fail_fast',           // Stop on first failure
-	CONTINUE_ON_ERROR = 'continue_on_error', // Continue executing remaining steps
-	RETRY = 'retry',                   // Retry failed steps
-	CIRCUIT_BREAKER = 'circuit_breaker' // Use circuit breaker pattern
-}
-
-/**
- * Retry configuration for resilient execution
- */
-export interface RetryConfig {
-	/** Maximum number of retry attempts */
-	readonly maxAttempts: number;
-	/** Initial delay between retries in milliseconds */
-	readonly initialDelayMs: number;
-	/** Backoff multiplier for exponential backoff */
-	readonly backoffMultiplier: number;
-	/** Maximum delay between retries in milliseconds */
-	readonly maxDelayMs: number;
-	/** Jitter factor (0-1) to add randomness to delays */
-	readonly jitterFactor: number;
-}
-
-/**
- * Default retry configuration
- */
-export const DEFAULT_RETRY_CONFIG: RetryConfig = {
-	maxAttempts: 3,
-	initialDelayMs: 1000,
-	backoffMultiplier: 2,
-	maxDelayMs: 30000,
-	jitterFactor: 0.1
-} as const;
-
-/**
- * Step definition within a workflow
- */
-export interface StepDefinition<TInput = unknown, TOutput = unknown> {
-	readonly id: StepId;
-	readonly name: string;
-	readonly description?: string;
-	readonly dependencies: readonly StepId[];
-	readonly retryConfig: RetryConfig;
-	readonly timeoutMs: number;
-	readonly execute: (input: TInput, context: StepContext) => Promise<TOutput>;
-}
-
-/**
- * Context provided to each step during execution
- */
-export interface StepContext {
-	readonly executionId: WorkflowExecutionId;
-	readonly stepId: StepId;
-	readonly logger: Logger;
-	readonly metadata: Readonly<Record<string, unknown>>;
-	/** Access outputs from previously executed steps */
-	getStepOutput: <T>(stepId: StepId) => Result<T, StepOutputNotFoundError>;
-}
-
-/**
- * Error thrown when step output is not found
- */
-export class StepOutputNotFoundError extends Error {
-	constructor(stepId: StepId) {
-		super(`Output for step ${stepId} not found`);
-		this.name = 'StepOutputNotFoundError';
-	}
-}
-
-/**
- * Workflow definition composed of steps
- */
-export interface WorkflowDefinition<TInput = unknown, TOutput = unknown> {
-	readonly id: string;
-	readonly name: string;
-	readonly version: string;
-	readonly type: WorkflowType;
-	readonly failureStrategy: FailureStrategy;
-	readonly steps: readonly StepDefinition[];
-	readonly inputValidator?: (input: unknown) => input is TInput;
-	readonly outputTransformer?: (stepOutputs: Map<StepId, unknown>) => TOutput;
-}
-
-// ============================================================================
-// Execution State Types
-// ============================================================================
-
-/**
- * Possible states of a workflow execution
+ * Execution status for orchestrator operations
  */
 export enum ExecutionStatus {
-	PENDING = 'pending',
-	RUNNING = 'running',
-	PAUSED = 'paused',
-	COMPLETED = 'completed',
-	FAILED = 'failed',
-	CANCELLED = 'cancelled',
-	TIMEOUT = 'timeout'
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+  TIMEOUT = 'TIMEOUT',
 }
 
 /**
- * Possible states of an individual step execution
+ * Priority levels for orchestrator tasks
  */
-export enum StepStatus {
-	PENDING = 'pending',
-	RUNNING = 'running',
-	COMPLETED = 'completed',
-	FAILED = 'failed',
-	SKIPPED = 'skipped',
-	CANCELLED = 'cancelled',
-	TIMEOUT = 'timeout'
-}
-
-/**
- * Execution state for a single step
- */
-export interface StepExecutionState {
-	readonly stepId: StepId;
-	readonly status: StepStatus;
-	readonly startedAt?: Date;
-	readonly completedAt?: Date;
-	readonly attempts: number;
-	readonly error?: ExecutionError;
-	readonly output?: unknown;
-}
-
-/**
- * Structured error information for execution failures
- */
-export interface ExecutionError {
-	readonly code: string;
-	readonly message: string;
-	readonly stack?: string;
-	readonly cause?: ExecutionError;
-	readonly metadata?: Record<string, unknown>;
-}
-
-/**
- * Complete workflow execution state
- */
-export interface WorkflowExecutionState {
-	readonly executionId: WorkflowExecutionId;
-	readonly workflowId: string;
-	readonly status: ExecutionStatus;
-	readonly input: unknown;
-	readonly stepStates: ReadonlyMap<StepId, StepExecutionState>;
-	readonly startedAt: Date;
-	readonly completedAt?: Date;
-	readonly error?: ExecutionError;
+export enum TaskPriority {
+  CRITICAL = 0,
+  HIGH = 1,
+  MEDIUM = 2,
+  LOW = 3,
+  BACKGROUND = 4,
 }
 
 // ============================================================================
-// Orchestrator Configuration Types
+// Core Entity Interfaces
 // ============================================================================
 
 /**
- * Configuration for the orchestrator runtime
+ * Base interface for all orchestrator entities
+ * Provides common fields shared across all domain objects
  */
-export interface OrchestratorConfig {
-	readonly maxConcurrentExecutions: number;
-	readonly defaultTimeoutMs: number;
-	readonly defaultRetryConfig: RetryConfig;
-	readonly enableMetrics: boolean;
-	readonly enableTracing: boolean;
-	readonly logLevel: 'debug' | 'info' | 'warn' | 'error';
+export interface BaseEntity {
+  readonly id: OrchestratorId;
+  readonly createdAt: ISOTimestamp;
+  readonly updatedAt: ISOTimestamp;
+  readonly version: number;
 }
 
 /**
- * Default orchestrator configuration
+ * Metadata associated with orchestrator operations
+ * Used for tracing, auditing, and debugging
  */
-export const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
-	maxConcurrentExecutions: 10,
-	defaultTimeoutMs: 300000, // 5 minutes
-	defaultRetryConfig: DEFAULT_RETRY_CONFIG,
-	enableMetrics: true,
-	enableTracing: true,
-	logLevel: 'info'
-} as const;
+export interface OperationMetadata {
+  /** Correlation ID for distributed tracing */
+  readonly correlationId: OrchestratorId;
+  /** ID of the user or system initiating the operation */
+  readonly initiatedBy: OrchestratorId;
+  /** Source system or service */
+  readonly source: string;
+  /** Optional tags for categorization */
+  readonly tags?: Record<string, string>;
+  /** Optional context for debugging */
+  readonly debugContext?: Record<string, unknown>;
+}
 
 // ============================================================================
-// Event Types for Event-Driven Workflows
+// Task & Workflow Types
 // ============================================================================
 
 /**
- * Event types emitted by the orchestrator
+ * Represents a single unit of work in the orchestrator
  */
-export enum OrchestratorEventType {
-	EXECUTION_STARTED = 'execution:started',
-	EXECUTION_COMPLETED = 'execution:completed',
-	EXECUTION_FAILED = 'execution:failed',
-	EXECUTION_CANCELLED = 'execution:cancelled',
-	STEP_STARTED = 'step:started',
-	STEP_COMPLETED = 'step:completed',
-	STEP_FAILED = 'step:failed',
-	STEP_RETRY_SCHEDULED = 'step:retry:scheduled'
+export interface Task extends BaseEntity {
+  /** Human-readable name for the task */
+  readonly name: string;
+  /** Detailed description of what the task does */
+  readonly description: string;
+  /** Current execution status */
+  readonly status: ExecutionStatus;
+  /** Priority level for scheduling */
+  readonly priority: TaskPriority;
+  /** Task-specific configuration */
+  readonly config: TaskConfig;
+  /** Execution results (populated after completion) */
+  readonly result?: TaskResult;
+  /** Error information (populated on failure) */
+  readonly error?: TaskError;
+  /** IDs of tasks that must complete before this one */
+  readonly dependencies: OrchestratorId[];
+  /** Maximum execution time in milliseconds */
+  readonly timeoutMs: number;
+  /** Number of retry attempts allowed */
+  readonly maxRetries: number;
+  /** Current retry count */
+  readonly retryCount: number;
 }
 
 /**
- * Base interface for orchestrator events
+ * Configuration for a task execution
+ */
+export interface TaskConfig {
+  /** Task type identifier for routing to appropriate handler */
+  readonly type: string;
+  /** Task-specific input parameters */
+  readonly parameters: Record<string, unknown>;
+  /** Resource requirements for execution */
+  readonly resources?: ResourceRequirements;
+}
+
+/**
+ * Resource requirements for task execution
+ */
+export interface ResourceRequirements {
+  /** Memory requirement in MB */
+  readonly memoryMb?: number;
+  /** CPU requirement (fractional cores allowed, e.g., 0.5) */
+  readonly cpu?: number;
+  /** GPU requirement */
+  readonly gpu?: boolean;
+  /** Required capabilities (e.g., ['python', 'tensorflow']) */
+  readonly capabilities?: string[];
+}
+
+/**
+ * Result of a completed task
+ */
+export interface TaskResult {
+  /** Status of the completed task */
+  readonly status: ExecutionStatus.COMPLETED;
+  /** Timestamp when task completed */
+  readonly completedAt: ISOTimestamp;
+  /** Output data from task execution */
+  readonly output: unknown;
+  /** Execution metrics */
+  readonly metrics: ExecutionMetrics;
+}
+
+/**
+ * Error information for failed tasks
+ */
+export interface TaskError {
+  /** Status indicating failure */
+  readonly status: ExecutionStatus.FAILED | ExecutionStatus.TIMEOUT | ExecutionStatus.CANCELLED;
+  /** Timestamp when failure occurred */
+  readonly failedAt: ISOTimestamp;
+  /** Error code for programmatic handling */
+  readonly code: string;
+  /** Human-readable error message */
+  readonly message: string;
+  /** Stack trace or additional error details */
+  readonly details?: string;
+  /** Whether the error is retryable */
+  readonly isRetryable: boolean;
+}
+
+/**
+ * Execution metrics for performance monitoring
+ */
+export interface ExecutionMetrics {
+  /** Time spent in queue waiting to execute (ms) */
+  readonly queueTimeMs: number;
+  /** Actual execution time (ms) */
+  readonly executionTimeMs: number;
+  /** Total time from creation to completion (ms) */
+  readonly totalTimeMs: number;
+  /** Resource utilization during execution */
+  readonly resourceUtilization?: ResourceUtilization;
+}
+
+/**
+ * Resource utilization metrics
+ */
+export interface ResourceUtilization {
+  /** Peak memory usage in MB */
+  readonly peakMemoryMb: number;
+  /** Average CPU utilization (0-1) */
+  readonly avgCpuUtilization: number;
+}
+
+// ============================================================================
+// Workflow Types
+// ============================================================================
+
+/**
+ * A workflow is a directed acyclic graph (DAG) of tasks
+ */
+export interface Workflow extends BaseEntity {
+  /** Human-readable name */
+  readonly name: string;
+  /** Workflow description */
+  readonly description: string;
+  /** Current execution status */
+  readonly status: ExecutionStatus;
+  /** Tasks in this workflow (flat list, dependencies define structure) */
+  readonly tasks: Task[];
+  /** Workflow-level configuration */
+  readonly config: WorkflowConfig;
+  /** Execution metadata */
+  readonly metadata: OperationMetadata;
+}
+
+/**
+ * Workflow configuration options
+ */
+export interface WorkflowConfig {
+  /** Global timeout for entire workflow (ms) */
+  readonly globalTimeoutMs: number;
+  /** Whether to continue on individual task failures */
+  readonly continueOnFailure: boolean;
+  /** Maximum parallel task executions */
+  readonly maxConcurrency: number;
+  /** Retry policy for failed tasks */
+  readonly retryPolicy: RetryPolicy;
+}
+
+/**
+ * Retry policy configuration
+ */
+export interface RetryPolicy {
+  /** Maximum number of retry attempts */
+  readonly maxAttempts: number;
+  /** Backoff strategy */
+  readonly backoffStrategy: BackoffStrategy;
+  /** Initial delay in milliseconds */
+  readonly initialDelayMs: number;
+  /** Maximum delay in milliseconds */
+  readonly maxDelayMs: number;
+}
+
+/**
+ * Backoff strategy for retries
+ */
+export enum BackoffStrategy {
+  /** Fixed delay between retries */
+  FIXED = 'FIXED',
+  /** Linear increase in delay */
+  LINEAR = 'LINEAR',
+  /** Exponential increase in delay */
+  EXPONENTIAL = 'EXPONENTIAL',
+}
+
+// ============================================================================
+// Orchestrator Service Types
+// ============================================================================
+
+/**
+ * Request to create a new workflow
+ */
+export interface CreateWorkflowRequest {
+  readonly name: string;
+  readonly description: string;
+  readonly tasks: CreateTaskRequest[];
+  readonly config?: Partial<WorkflowConfig>;
+  readonly metadata: OperationMetadata;
+}
+
+/**
+ * Request to create a new task (used within workflow creation)
+ */
+export interface CreateTaskRequest {
+  readonly name: string;
+  readonly description: string;
+  readonly config: TaskConfig;
+  readonly priority?: TaskPriority;
+  readonly dependencies?: OrchestratorId[];
+  readonly timeoutMs?: number;
+  readonly maxRetries?: number;
+}
+
+/**
+ * Response from workflow creation
+ */
+export interface CreateWorkflowResponse {
+  readonly workflow: Workflow;
+  readonly acceptedAt: ISOTimestamp;
+}
+
+/**
+ * Request to execute an existing workflow
+ */
+export interface ExecuteWorkflowRequest {
+  readonly workflowId: OrchestratorId;
+  /** Override parameters for specific tasks */
+  readonly parameterOverrides?: Record<OrchestratorId, Record<string, unknown>>;
+  readonly metadata: OperationMetadata;
+}
+
+/**
+ * Response from workflow execution
+ */
+export interface ExecuteWorkflowResponse {
+  readonly executionId: OrchestratorId;
+  readonly status: ExecutionStatus;
+  readonly startedAt: ISOTimestamp;
+}
+
+/**
+ * Query parameters for listing workflows
+ */
+export interface ListWorkflowsQuery {
+  readonly status?: ExecutionStatus;
+  readonly createdAfter?: ISOTimestamp;
+  readonly createdBefore?: ISOTimestamp;
+  readonly initiatedBy?: OrchestratorId;
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+// ============================================================================
+// Event Types (for pub/sub and observability)
+// ============================================================================
+
+/**
+ * Base event interface for orchestrator events
  */
 export interface OrchestratorEvent {
-	readonly type: OrchestratorEventType;
-	readonly timestamp: Date;
-	readonly executionId: WorkflowExecutionId;
+  readonly eventId: OrchestratorId;
+  readonly eventType: string;
+  readonly timestamp: ISOTimestamp;
+  readonly payload: unknown;
+  readonly metadata: OperationMetadata;
 }
 
 /**
- * Execution started event
+ * Task status change event
  */
-export interface ExecutionStartedEvent extends OrchestratorEvent {
-	readonly type: OrchestratorEventType.EXECUTION_STARTED;
-	readonly workflowId: string;
-	readonly input: unknown;
+export interface TaskStatusChangedEvent extends OrchestratorEvent {
+  readonly eventType: 'TASK_STATUS_CHANGED';
+  readonly payload: {
+    readonly taskId: OrchestratorId;
+    readonly workflowId: OrchestratorId;
+    readonly previousStatus: ExecutionStatus;
+    readonly newStatus: ExecutionStatus;
+  };
 }
 
 /**
- * Execution completed event
+ * Workflow status change event
  */
-export interface ExecutionCompletedEvent extends OrchestratorEvent {
-	readonly type: OrchestratorEventType.EXECUTION_COMPLETED;
-	readonly output: unknown;
-	readonly durationMs: number;
+export interface WorkflowStatusChangedEvent extends OrchestratorEvent {
+  readonly eventType: 'WORKFLOW_STATUS_CHANGED';
+  readonly payload: {
+    readonly workflowId: OrchestratorId;
+    readonly previousStatus: ExecutionStatus;
+    readonly newStatus: ExecutionStatus;
+  };
 }
 
 /**
- * Execution failed event
+ * Task execution completed event
  */
-export interface ExecutionFailedEvent extends OrchestratorEvent {
-	readonly type: OrchestratorEventType.EXECUTION_FAILED;
-	readonly error: ExecutionError;
-	readonly durationMs: number;
+export interface TaskCompletedEvent extends OrchestratorEvent {
+  readonly eventType: 'TASK_COMPLETED';
+  readonly payload: {
+    readonly taskId: OrchestratorId;
+    readonly workflowId: OrchestratorId;
+    readonly result: TaskResult;
+  };
 }
 
 /**
- * Step started event
+ * Task execution failed event
  */
-export interface StepStartedEvent extends OrchestratorEvent {
-	readonly type: OrchestratorEventType.STEP_STARTED;
-	readonly stepId: StepId;
-	readonly attempt: number;
+export interface TaskFailedEvent extends OrchestratorEvent {
+  readonly eventType: 'TASK_FAILED';
+  readonly payload: {
+    readonly taskId: OrchestratorId;
+    readonly workflowId: OrchestratorId;
+    readonly error: TaskError;
+  };
 }
 
-/**
- * Step completed event
- */
-export interface StepCompletedEvent extends OrchestratorEvent {
-	readonly type: OrchestratorEventType.STEP_COMPLETED;
-	readonly stepId: StepId;
-	readonly output: unknown;
-	readonly durationMs: number;
-}
-
-/**
- * Step failed event
- */
-export interface StepFailedEvent extends OrchestratorEvent {
-	readonly type: OrchestratorEventType.STEP_FAILED;
-	readonly stepId: StepId;
-	readonly error: ExecutionError;
-	readonly willRetry: boolean;
-}
-
-/**
- * Union type of all orchestrator events
- */
-export type OrchestratorEvents =
-	| ExecutionStartedEvent
-	| ExecutionCompletedEvent
-	| ExecutionFailedEvent
-	| ExecutionCancelledEvent
-	| StepStartedEvent
-	| StepCompletedEvent
-	| StepFailedEvent
-	| StepRetryScheduledEvent;
-
-/**
- * Execution cancelled event
- */
-export interface ExecutionCancelledEvent extends OrchestratorEvent {
-	readonly type: OrchestratorEventType.EXECUTION_CANCELLED;
-	readonly reason: string;
-	readonly cancelledBy?: string;
-}
-
-/**
- * Step retry scheduled event
- */
-export interface StepRetryScheduledEvent extends OrchestratorEvent {
-	readonly type: OrchestratorEventType.STEP_RETRY_SCHEDULED;
-	readonly stepId: StepId;
-	readonly attempt: number;
-	readonly nextAttemptAt: Date;
-}
+// Union type of all orchestrator events
+export type AllOrchestratorEvents = 
+  | TaskStatusChangedEvent 
+  | WorkflowStatusChangedEvent 
+  | TaskCompletedEvent 
+  | TaskFailedEvent;
 
 // ============================================================================
-// Orchestrator Interface (Service Layer Contract)
+// Error Types
 // ============================================================================
 
 /**
- * Interface for the orchestrator service
- * Implemented at the Service layer (Layer 4)
+ * Error codes for orchestrator-specific errors
  */
-export interface OrchestratorService {
-	/**
-	 * Register a workflow definition for execution
-	 */
-	registerWorkflow<TInput, TOutput>(
-		definition: WorkflowDefinition<TInput, TOutput>
-	): Result<void, WorkflowRegistrationError>;
-
-	/**
-	 * Execute a registered workflow
-	 */
-	executeWorkflow<TInput, TOutput>(
-		workflowId: string,
-		input: TInput,
-		options?: ExecutionOptions
-	): Promise<Result<WorkflowExecutionId, WorkflowExecutionError>>;
-
-	/**
-	 * Get the current state of a workflow execution
-	 */
-	getExecutionState(
-		executionId: WorkflowExecutionId
-	): Result<WorkflowExecutionState, ExecutionNotFoundError>;
-
-	/**
-	 * Cancel a running workflow execution
-	 */
-	cancelExecution(
-		executionId: WorkflowExecutionId,
-		reason: string
-	): Promise<Result<void, ExecutionNotFoundError | InvalidStateTransitionError>>;
-
-	/**
-	 * Subscribe to orchestrator events
-	 */
-	subscribeToEvents(
-		handler: (event: OrchestratorEvents) => void
-	): () => void;
+export enum OrchestratorErrorCode {
+  WORKFLOW_NOT_FOUND = 'WORKFLOW_NOT_FOUND',
+  TASK_NOT_FOUND = 'TASK_NOT_FOUND',
+  INVALID_WORKFLOW_CONFIG = 'INVALID_WORKFLOW_CONFIG',
+  CIRCULAR_DEPENDENCY = 'CIRCULAR_DEPENDENCY',
+  EXECUTION_TIMEOUT = 'EXECUTION_TIMEOUT',
+  RESOURCE_UNAVAILABLE = 'RESOURCE_UNAVAILABLE',
+  INVALID_STATE_TRANSITION = 'INVALID_STATE_TRANSITION',
+  DUPLICATE_TASK_ID = 'DUPLICATE_TASK_ID',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
 }
 
 /**
- * Error thrown when workflow registration fails
+ * Structured error for orchestrator operations
  */
-export class WorkflowRegistrationError extends Error {
-	constructor(message: string, public readonly workflowId: string) {
-		super(message);
-		this.name = 'WorkflowRegistrationError';
-	}
-}
-
-/**
- * Error thrown when workflow execution fails to start
- */
-export class WorkflowExecutionError extends Error {
-	constructor(message: string, public readonly cause?: Error) {
-		super(message);
-		this.name = 'WorkflowExecutionError';
-	}
-}
-
-/**
- * Error thrown when execution is not found
- */
-export class ExecutionNotFoundError extends Error {
-	constructor(public readonly executionId: WorkflowExecutionId) {
-		super(`Execution ${executionId} not found`);
-		this.name = 'ExecutionNotFoundError';
-	}
-}
-
-/**
- * Error thrown when invalid state transition is attempted
- */
-export class InvalidStateTransitionError extends Error {
-	constructor(
-		public readonly executionId: WorkflowExecutionId,
-		public readonly fromStatus: ExecutionStatus,
-		public readonly toStatus: ExecutionStatus
-	) {
-		super(`Cannot transition from ${fromStatus} to ${toStatus} for execution ${executionId}`);
-		this.name = 'InvalidStateTransitionError';
-	}
+export interface OrchestratorError {
+  readonly code: OrchestratorErrorCode;
+  readonly message: string;
+  /** Original error that caused this error, if any */
+  readonly cause?: Error;
+  /** Additional context for debugging */
+  readonly context?: Record<string, unknown>;
 }
 
 // ============================================================================
-// Execution Options
+// Repository Types (Layer 2 interface)
 // ============================================================================
 
 /**
- * Options for workflow execution
+ * Interface for workflow persistence operations
+ * Implemented by the Repository layer
  */
-export interface ExecutionOptions {
-	readonly executionId?: WorkflowExecutionId;
-	readonly timeoutMs?: number;
-	readonly priority?: number;
-	readonly metadata?: Record<string, unknown>;
-	readonly onStepComplete?: (stepId: StepId, output: unknown) => void;
-	readonly onStepError?: (stepId: StepId, error: ExecutionError) => void;
+export interface WorkflowRepository {
+  create(workflow: Workflow): Promise<Workflow>;
+  findById(id: OrchestratorId): Promise<Workflow | null>;
+  findByQuery(query: ListWorkflowsQuery): Promise<Workflow[]>;
+  update(workflow: Workflow): Promise<Workflow>;
+  delete(id: OrchestratorId): Promise<boolean>;
+}
+
+/**
+ * Interface for task persistence operations
+ * Implemented by the Repository layer
+ */
+export interface TaskRepository {
+  create(task: Task): Promise<Task>;
+  findById(id: OrchestratorId): Promise<Task | null>;
+  findByWorkflowId(workflowId: OrchestratorId): Promise<Task[]>;
+  update(task: Task): Promise<Task>;
+  updateStatus(
+    id: OrchestratorId, 
+    status: ExecutionStatus, 
+    error?: TaskError, 
+    result?: TaskResult
+  ): Promise<Task>;
 }
 
 // ============================================================================
@@ -479,67 +458,67 @@ export interface ExecutionOptions {
 // ============================================================================
 
 /**
- * Type guard for ExecutionError
+ * Type guard to check if a value is a valid ExecutionStatus
  */
-export function isExecutionError(error: unknown): error is ExecutionError {
-	return (
-		typeof error === 'object' &&
-		error !== null &&
-		'code' in error &&
-		'message' in error &&
-		typeof (error as ExecutionError).code === 'string' &&
-		typeof (error as ExecutionError).message === 'string'
-	);
+export function isExecutionStatus(value: unknown): value is ExecutionStatus {
+  return typeof value === 'string' && Object.values(ExecutionStatus).includes(value as ExecutionStatus);
 }
 
 /**
- * Type guard for WorkflowExecutionState
+ * Type guard to check if a value is a valid TaskPriority
  */
-export function isWorkflowExecutionState(state: unknown): state is WorkflowExecutionState {
-	return (
-		typeof state === 'object' &&
-		state !== null &&
-		'executionId' in state &&
-		'workflowId' in state &&
-		'status' in state &&
-		'stepStates' in state &&
-		'startedAt' in state
-	);
+export function isTaskPriority(value: unknown): value is TaskPriority {
+  return typeof value === 'number' && Object.values(TaskPriority).includes(value as TaskPriority);
 }
 
 /**
- * Type guard for StepExecutionState
+ * Type guard to check if a value is a valid OrchestratorErrorCode
  */
-export function isStepExecutionState(state: unknown): state is StepExecutionState {
-	return (
-		typeof state === 'object' &&
-		state !== null &&
-		'stepId' in state &&
-		'status' in state &&
-		'attempts' in state
-	);
+export function isOrchestratorErrorCode(value: unknown): value is OrchestratorErrorCode {
+  return typeof value === 'string' && Object.values(OrchestratorErrorCode).includes(value as OrchestratorErrorCode);
+}
+
+/**
+ * Type guard to check if a task has failed
+ */
+export function isFailedTask(task: Task): task is Task & { error: TaskError } {
+  return task.status === ExecutionStatus.FAILED && task.error !== undefined;
+}
+
+/**
+ * Type guard to check if a task has completed successfully
+ */
+export function isCompletedTask(task: Task): task is Task & { result: TaskResult } {
+  return task.status === ExecutionStatus.COMPLETED && task.result !== undefined;
 }
 
 // ============================================================================
-// Utility Types
+// Constants
 // ============================================================================
 
 /**
- * Infer input type from workflow definition
+ * Default configuration values
  */
-export type InferWorkflowInput<T> = T extends WorkflowDefinition<infer I, unknown> ? I : never;
+export const DEFAULTS = {
+  WORKFLOW_TIMEOUT_MS: 30 * 60 * 1000, // 30 minutes
+  TASK_TIMEOUT_MS: 5 * 60 * 1000,      // 5 minutes
+  MAX_RETRIES: 3,
+  MAX_CONCURRENCY: 10,
+  INITIAL_RETRY_DELAY_MS: 1000,
+  MAX_RETRY_DELAY_MS: 60 * 1000,       // 1 minute
+  LIST_LIMIT: 50,
+} as const;
 
 /**
- * Infer output type from workflow definition
+ * Validation constraints
  */
-export type InferWorkflowOutput<T> = T extends WorkflowDefinition<unknown, infer O> ? O : never;
-
-/**
- * Async result type for orchestrator operations
- */
-export type AsyncResult<T, E = Error> = Promise<Result<T, E>>;
-
-/**
- * Handler function type for event subscriptions
- */
-export type EventHandler<T extends OrchestratorEvents> = (event: T) => void;
+export const CONSTRAINTS = {
+  MAX_WORKFLOW_NAME_LENGTH: 256,
+  MAX_TASK_NAME_LENGTH: 256,
+  MAX_DESCRIPTION_LENGTH: 4000,
+  MAX_TAGS: 20,
+  MAX_TAG_KEY_LENGTH: 128,
+  MAX_TAG_VALUE_LENGTH: 256,
+  MIN_TIMEOUT_MS: 1000,
+  MAX_TIMEOUT_MS: 24 * 60 * 60 * 1000, // 24 hours
+} as const;
