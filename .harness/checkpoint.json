@@ -1,9 +1,9 @@
 {
-  "timestamp": 1775192680510,
+  "timestamp": 1775193581765,
   "currentTask": {
-    "id": "evolution-longfile-1775189359467-8gsrb",
-    "title": "Refactor long file: test-utils.tsx",
-    "description": "File src\\app\\__tests__\\test-utils.tsx has 432 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 432 lines\n  Location: src\\app\\__tests__\\test-utils.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\test-utils.tsx",
+    "id": "evolution-longfile-1775189359468-uiox0",
+    "title": "Refactor long file: rendering.test.tsx",
+    "description": "File src\\app\\__tests__\\rendering.test.tsx has 640 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 640 lines\n  Location: src\\app\\__tests__\\rendering.test.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\rendering.test.tsx",
     "requirements": [
       "Identify cohesive groups of functionality",
       "Extract into separate modules",
@@ -14,21 +14,22 @@
     "category": "technical_debt",
     "maxDuration": 3600000,
     "createdAt": "2026-04-03T04:09:19.496Z",
-    "startedAt": "2026-04-03T04:34:59.839Z"
+    "startedAt": "2026-04-03T05:08:44.630Z"
   },
   "stats": {
     "completed": 0,
-    "failed": 16,
+    "failed": 17,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
-    "failed": 10,
+    "failed": 11,
     "escalated": 0,
     "startTime": 1775185463716
   },
   "queueState": {
-    "queue": [
+    "queue": [],
+    "activeTasks": [
       {
         "id": "evolution-longfile-1775189359468-uiox0",
         "title": "Refactor long file: rendering.test.tsx",
@@ -39,28 +40,11 @@
           "Update imports"
         ],
         "priority": "medium",
-        "status": "pending",
-        "category": "technical_debt",
-        "maxDuration": 3600000,
-        "createdAt": "2026-04-03T04:09:19.496Z"
-      }
-    ],
-    "activeTasks": [
-      {
-        "id": "evolution-longfile-1775189359467-8gsrb",
-        "title": "Refactor long file: test-utils.tsx",
-        "description": "File src\\app\\__tests__\\test-utils.tsx has 432 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 432 lines\n  Location: src\\app\\__tests__\\test-utils.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\test-utils.tsx",
-        "requirements": [
-          "Identify cohesive groups of functionality",
-          "Extract into separate modules",
-          "Update imports"
-        ],
-        "priority": "medium",
         "status": "running",
         "category": "technical_debt",
         "maxDuration": 3600000,
         "createdAt": "2026-04-03T04:09:19.496Z",
-        "startedAt": "2026-04-03T04:34:59.839Z"
+        "startedAt": "2026-04-03T05:08:44.630Z"
       }
     ]
   },

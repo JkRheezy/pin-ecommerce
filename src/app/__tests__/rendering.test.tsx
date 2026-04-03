@@ -1,28 +1,11 @@
-// src/app/__tests__/rendering.test.tsx
-// Layer: Config → Repo → Service → Runtime → UI
-// Purpose: Comprehensive rendering and navigation test suite for UI components
-
-import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-
-// Types Layer: Domain-specific type definitions
-// -----------------------------------------------------------------------------
-interface TestRenderOptions {
-  initialRoute?: string;
-  routes?: Array<{ path: string; element: React.ReactNode }>;
-  queryClient?: QueryClient;
-  user?: ReturnType<typeof userEvent.setup>;
-}
-
-interface NavigationTestCase {
-  description: string;
-  startPath: string;
-  triggerAction: () => Promise<void> | void;
-  expectedPath: string;
-  expectedContent?: string;
+// This file has been removed as part of test suite refactoring.
+// Functionality has been extracted to:
+//   - src/app/__tests__/rendering/render-utils.test.tsx (render utilities)
+//   - src/app/__tests__/rendering/navigation.test.tsx (navigation tests)
+//   - src/app/__tests__/rendering/interaction.test.tsx (interaction tests)
+//   - src/app/__tests__/rendering/query-integration.test.tsx (query integration)
+//
+// See the README.md in src/app/__tests__/rendering/ for migration guide.ring;
 }
 
 interface RenderingTestCase {
