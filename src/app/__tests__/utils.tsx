@@ -1,33 +1,45 @@
 /**
- * Test Utilities Module
+ * Test Utilities Module (Backward Compatibility Re-exports)
  * 
- * Shared test helpers for the Harness-Engineering application.
- * Follows the six-layer architecture: Types → Config → Repo → Service → Runtime → UI
+ * This module re-exports from the new modular test utilities for backward compatibility.
+ * @deprecated Import directly from the new modules:
+ *   - `src/app/__tests__/utils/types` for types
+ *   - `src/app/__tests__/utils/config` for configuration
+ *   - `src/app/__tests__/utils/render` for render helpers
  * 
  * @module src/app/__tests__/utils
  */
 
-import React, { ReactElement } from 'react';
-import { render, RenderOptions, RenderResult } from '@testing-library/react';
-import { MemoryRouter, MemoryRouterProps } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ThemeProvider } from '@harnessio/uicore';
-import { Logger } from '@harnessio/logging';
+// Re-export from types module
+export type { 
+  TestProviderConfig,
+  TestRenderOptions,
+  CustomRenderResult
+} from './utils/types';
 
-// Types Layer: Test utility type definitions
-// ==========================================
+// Re-export from config module
+export {
+  createTestQueryClient,
+  defaultTestConfig,
+  mergeTestConfig
+} from './utils/config';
 
-/**
- * Configuration options for test wrapper providers
+// Re-export from render module
+export {
+  createTestWrapper,
+  customRender,
+  renderWithRouter,
+  renderWithQueryClient
+} from './utils/render';
+
+// Re-export commonly used testing-library utilities for convenience
+export { render, screen, waitFor, fireEvent } from '@testing-library/react';
+
+/*
+ * NOTE: This file is maintained for backward compatibility.
+ * New code should import directly from the specific utility modules.
+ * This file will be removed in a future major version.
  */
-export interface TestProviderConfig {
-  /** Router configuration for MemoryRouter */
-  router?: MemoryRouterProps;
-  /** Query client configuration for React Query */
-  queryClient?: QueryClient;
-  /** Theme configuration */
-  theme?: 'light' | 'dark';
-}
 
 /**
  * Extended render options with provider configuration

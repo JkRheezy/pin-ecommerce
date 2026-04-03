@@ -1,9 +1,9 @@
 {
-  "timestamp": 1775189963814,
+  "timestamp": 1775190863845,
   "currentTask": {
-    "id": "evolution-longfile-1775189359466-6624k",
-    "title": "Refactor long file: page.test.tsx",
-    "description": "File src\\app\\page.test.tsx has 449 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 449 lines\n  Location: src\\app\\page.test.tsx\n\n📁 Related Files:\n- src\\app\\page.test.tsx",
+    "id": "evolution-longfile-1775189359467-y0dpo",
+    "title": "Refactor long file: utils.tsx",
+    "description": "File src\\app\\__tests__\\utils.tsx has 348 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 348 lines\n  Location: src\\app\\__tests__\\utils.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\utils.tsx",
     "requirements": [
       "Identify cohesive groups of functionality",
       "Extract into separate modules",
@@ -14,36 +14,21 @@
     "category": "technical_debt",
     "maxDuration": 3600000,
     "createdAt": "2026-04-03T04:09:19.496Z",
-    "startedAt": "2026-04-03T04:14:50.454Z"
+    "startedAt": "2026-04-03T04:24:21.356Z"
   },
   "stats": {
     "completed": 0,
-    "failed": 14,
+    "failed": 15,
     "escalated": 0
   },
   "sessionStats": {
     "completed": 0,
-    "failed": 8,
+    "failed": 9,
     "escalated": 0,
     "startTime": 1775185463716
   },
   "queueState": {
     "queue": [
-      {
-        "id": "evolution-longfile-1775189359467-y0dpo",
-        "title": "Refactor long file: utils.tsx",
-        "description": "File src\\app\\__tests__\\utils.tsx has 348 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 348 lines\n  Location: src\\app\\__tests__\\utils.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\utils.tsx",
-        "requirements": [
-          "Identify cohesive groups of functionality",
-          "Extract into separate modules",
-          "Update imports"
-        ],
-        "priority": "medium",
-        "status": "pending",
-        "category": "technical_debt",
-        "maxDuration": 3600000,
-        "createdAt": "2026-04-03T04:09:19.496Z"
-      },
       {
         "id": "evolution-longfile-1775189359467-8gsrb",
         "title": "Refactor long file: test-utils.tsx",
@@ -77,9 +62,9 @@
     ],
     "activeTasks": [
       {
-        "id": "evolution-longfile-1775189359466-6624k",
-        "title": "Refactor long file: page.test.tsx",
-        "description": "File src\\app\\page.test.tsx has 449 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 449 lines\n  Location: src\\app\\page.test.tsx\n\n📁 Related Files:\n- src\\app\\page.test.tsx",
+        "id": "evolution-longfile-1775189359467-y0dpo",
+        "title": "Refactor long file: utils.tsx",
+        "description": "File src\\app\\__tests__\\utils.tsx has 348 lines. Consider splitting into smaller modules.\n\n📊 Impact Score: 5/10\n\n🎯 Suggested Approach:\n1. Identify cohesive groups of functionality\n2. Extract into separate modules\n3. Update imports\n\n📋 Evidence:\n- [code_smell] File length: 348 lines\n  Location: src\\app\\__tests__\\utils.tsx\n\n📁 Related Files:\n- src\\app\\__tests__\\utils.tsx",
         "requirements": [
           "Identify cohesive groups of functionality",
           "Extract into separate modules",
@@ -90,7 +75,7 @@
         "category": "technical_debt",
         "maxDuration": 3600000,
         "createdAt": "2026-04-03T04:09:19.496Z",
-        "startedAt": "2026-04-03T04:14:50.454Z"
+        "startedAt": "2026-04-03T04:24:21.356Z"
       }
     ]
   },
