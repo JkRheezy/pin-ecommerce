@@ -13,7 +13,6 @@
 
 import { z } from 'zod';
 
-// TODO: [DEPRECATED-1234] Remove this file in v3.0.0
 // Migration guide: https://docs.harness-engineering.io/migrations/trends-types
 
 // ============================================================================
@@ -23,6 +22,9 @@ import { z } from 'zod';
 /**
  * Represents the granularity of trend data points.
  * Used to control the resolution of time-series data.
+ *
+ * @deprecated Use `TrendGranularity` from `@harness-engineering/trends-types` instead.
+ * This will be removed in version 3.0.0.
  */
 export enum TrendGranularity {
   MINUTE = 'minute',
