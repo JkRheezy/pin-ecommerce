@@ -1,167 +1,236 @@
 /**
  * Test Utilities Module
  * 
- * Shared test helpers and utilities following the six-layer architecture.
- * Layer: Runtime (test runtime utilities)
+ * Shared test helpers for the Harness-Engineering application.
+ * Follows the six-layer architecture: Types → Config → Repo → Service → Runtime → UI
+ * 
+ * @module src/app/__tests__/utils
  */
 
 import React, { ReactElement } from 'react';
 import { render, RenderOptions, RenderResult } from '@testing-library/react';
-import { Provider } from 'react-redux';
-import { configureStore, EnhancedStore } from '@reduxjs/toolkit';
 import { MemoryRouter, MemoryRouterProps } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from '@harnessio/uicore';
+import { Logger } from '@harnessio/logging';
 
-// Types Layer: Test-specific type definitions
-// ===========================================
-
-/**
- * Configuration for creating a mock store in tests
- */
-export interface MockStoreConfig {
-  /** Initial state slices to merge into default state */
-  initialState?: Record<string, unknown>;
-  /** Reducers to include in the store */
-  reducers?: Record<string, unknown>;
-  /** Enable Redux DevTools in test environment */
-  devTools?: boolean;
-}
-
-/**
- * Options for rendering a component with test providers
- */
-export interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
-  /** Store configuration for Redux provider */
-  storeConfig?: MockStoreConfig;
-  /** Router configuration for MemoryRouter */
-  routerConfig?: MemoryRouterProps;
-  /** Additional wrapper components */
-  wrappers?: React.ComponentType<{ children: React.ReactNode }>[];
-}
-
-/**
- * Extended render result with store reference
- */
-export interface CustomRenderResult extends RenderResult {
-  /** Reference to the Redux store instance */
-  store: EnhancedStore;
-}
-
-/**
- * Mock API response structure
- */
-export interface MockApiResponse<T = unknown> {
-  data: T;
-  status: number;
-  statusText: string;
-  headers?: Record<string, string>;
-}
-
-/**
- * Error types for test utilities
- */
-export class TestUtilityError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
-    super(message);
-    this.name = 'TestUtilityError';
-    Object.setPrototypeOf(this, TestUtilityError.prototype);
-  }
-}
-
-// Config Layer: Default configurations
-// ====================================
-
-const DEFAULT_MOCK_STORE_CONFIG: MockStoreConfig = {
-  initialState: {},
-  reducers: {},
-  devTools: false,
-};
-
-const DEFAULT_ROUTER_CONFIG: MemoryRouterProps = {
-  initialEntries: ['/'],
-};
-
-// Service Layer: Core test utility functions
+// Types Layer: Test utility type definitions
 // ==========================================
 
 /**
- * Creates a mock Redux store for testing
- * 
- * @param config - Store configuration options
- * @returns Configured Redux store instance
- * @throws TestUtilityError if store creation fails
+ * Configuration options for test wrapper providers
  */
-export function createMockStore(config: MockStoreConfig = {}): EnhancedStore {
-  const mergedConfig = { ...DEFAULT_MOCK_STORE_CONFIG, ...config };
-  
-  try {
-    return configureStore({
-      reducer: mergedConfig.reducers ?? {},
-      preloadedState: mergedConfig.initialState,
-      devTools: mergedConfig.devTools,
-    });
-  } catch (error) {
-    throw new TestUtilityError('Failed to create mock store', error);
-  }
+export interface TestProviderConfig {
+  /** Router configuration for MemoryRouter */
+  router?: MemoryRouterProps;
+  /** Query client configuration for React Query */
+  queryClient?: QueryClient;
+  /** Theme configuration */
+  theme?: 'light' | 'dark';
 }
+
+/**
+ * Extended render options with provider configuration
+ */
+export interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
+  /** Provider configuration for test wrapper */
+  providers?: TestProviderConfig;
+}
+
+/**
+ * Mock data factory function type
+ */
+export type MockFactory<T, Args extends unknown[] = []> = (...args: Args) => T;
+
+/**
+ * Async test helper result type
+ */
+export type AsyncTestResult<T> = Promise<{ success: true; data: T } | { success: false; error: Error }>;
+
+// Config Layer: Default configurations
+// =====================================
+
+const logger = Logger.getInstance('TestUtils');
+
+/**
+ * Default query client configuration for tests
+ * Disables retries and sets short stale time for predictable test behavior
+ */
+export const createTestQueryClient = (): QueryClient => {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        staleTime: 0,
+        gcTime: 0,
+        refetchOnWindowFocus: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  });
+};
+
+/**
+ * Default test provider configuration
+ */
+export const defaultTestConfig: Required<TestProviderConfig> = {
+  router: { initialEntries: ['/'] },
+  queryClient: createTestQueryClient(),
+  theme: 'light',
+};
+
+// Repo Layer: Data access and mocking utilities
+// ==============================================
 
 /**
  * Creates a mock API response with proper typing
  * 
- * @param data - Response data payload
+ * @template T - The type of data in the response
+ * @param data - The response data
  * @param status - HTTP status code (default: 200)
- * @param headers - Optional response headers
- * @returns Typed mock API response
+ * @returns Mocked API response object
  */
-export function createMockApiResponse<T>(
-  data: T,
-  status: number = 200,
-  headers?: Record<string, string>
-): MockApiResponse<T> {
-  // Validate status code range
-  if (status < 100 || status > 599) {
-    throw new TestUtilityError(`Invalid HTTP status code: ${status}`);
-  }
-
+export function createMockApiResponse<T>(data: T, status = 200): { data: T; status: number; ok: boolean } {
   return {
     data,
     status,
-    statusText: getStatusText(status),
-    headers: headers ?? { 'content-type': 'application/json' },
+    ok: status >= 200 && status < 300,
   };
 }
 
 /**
- * Delays execution for async testing scenarios
+ * Creates a mock API error response
  * 
- * @param ms - Milliseconds to delay
- * @returns Promise that resolves after delay
+ * @param message - Error message
+ * @param status - HTTP status code (default: 500)
+ * @returns Mocked API error response
  */
-export function delay(ms: number): Promise<void> {
-  if (ms < 0) {
-    throw new TestUtilityError('Delay duration must be non-negative');
+export function createMockApiError(message: string, status = 500): { error: Error; status: number; ok: false } {
+  const error = new Error(message);
+  return {
+    error,
+    status,
+    ok: false,
+  };
+}
+
+/**
+ * Factory for generating mock data with validation
+ * 
+ * @template T - The type of mock data to generate
+ * @param baseFactory - Base factory function
+ * @param overrides - Partial overrides for the generated data
+ * @returns Validated mock data
+ */
+export function createMock<T extends Record<string, unknown>>(
+  baseFactory: MockFactory<T>,
+  overrides: Partial<T> = {}
+): T {
+  try {
+    const base = baseFactory();
+    const merged = { ...base, ...overrides };
+    
+    // Validate required fields are present
+    const missingFields = Object.keys(base).filter(key => !(key in merged));
+    if (missingFields.length > 0) {
+      throw new Error(`Mock data missing required fields: ${missingFields.join(', ')}`);
+    }
+    
+    return merged;
+  } catch (error) {
+    logger.error('Failed to create mock data', { error, overrides });
+    throw error;
   }
-  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Service Layer: Business logic test helpers
+// ==========================================
+
+/**
+ * Waits for a condition to be met with timeout
+ * 
+ * @param condition - Function that returns true when condition is met
+ * @param timeout - Maximum wait time in ms (default: 5000)
+ * @param interval - Check interval in ms (default: 50)
+ * @returns Promise that resolves when condition is met
+ * @throws Error if timeout is reached
+ */
+export async function waitForCondition(
+  condition: () => boolean,
+  timeout = 5000,
+  interval = 50
+): Promise<void> {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeout) {
+    if (condition()) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+  
+  throw new Error(`Condition not met within ${timeout}ms`);
+}
+
+/**
+ * Suppresses expected console errors during test execution
+ * Use sparingly and only for expected errors
+ * 
+ * @param fn - Function to execute with suppressed errors
+ * @param expectedPatterns - Patterns of expected error messages to suppress
+ * @returns Result of the executed function
+ */
+export async function withSuppressedConsoleErrors<T>(
+  fn: () => Promise<T>,
+  expectedPatterns: RegExp[] = []
+): Promise<T> {
+  const originalError = console.error;
+  const suppressedErrors: Error[] = [];
+  
+  console.error = (...args: unknown[]) => {
+    const message = args.join(' ');
+    const isExpected = expectedPatterns.some(pattern => pattern.test(message));
+    
+    if (!isExpected) {
+      originalError.apply(console, args);
+    } else {
+      suppressedErrors.push(new Error(message));
+    }
+  };
+  
+  try {
+    const result = await fn();
+    return result;
+  } finally {
+    console.error = originalError;
+    
+    if (suppressedErrors.length > 0) {
+      logger.debug('Suppressed expected console errors', { count: suppressedErrors.length });
+    }
+  }
 }
 
 /**
  * Creates a deferred promise for testing async operations
- * Useful for testing loading states and race conditions
  * 
- * @returns Deferred promise controller
+ * @template T - The type of the deferred value
+ * @returns Object with promise, resolve, and reject functions
  */
 export function createDeferred<T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
-  reject: (reason: unknown) => void;
+  reject: (error: Error) => void;
 } {
   let resolveFn: (value: T) => void;
-  let rejectFn: (reason: unknown) => void;
-
+  let rejectFn: (error: Error) => void;
+  
   const promise = new Promise<T>((resolve, reject) => {
     resolveFn = resolve;
     rejectFn = reject;
   });
-
+  
   return {
     promise,
     resolve: resolveFn!,
@@ -169,180 +238,133 @@ export function createDeferred<T>(): {
   };
 }
 
-// Runtime Layer: React testing utilities
-// ======================================
+// Runtime Layer: Component rendering and interaction
+// ==================================================
 
 /**
- * Combines multiple wrapper components into a single wrapper
+ * Creates a test wrapper component with all required providers
  * 
- * @param wrappers - Array of wrapper components
- * @returns Combined wrapper component
+ * @param config - Provider configuration
+ * @returns Wrapper component
  */
-function combineWrappers(
-  wrappers: React.ComponentType<{ children: React.ReactNode }>[]
-): React.ComponentType<{ children: React.ReactNode }> {
-  return function CombinedWrapper({ children }: { children: React.ReactNode }) {
-    return wrappers.reduceRight(
-      (acc, Wrapper) => <Wrapper>{acc}</Wrapper>,
-      children
+function createTestWrapper(config: Required<TestProviderConfig>): React.FC<{ children: React.ReactNode }> {
+  const TestWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    return (
+      <QueryClientProvider client={config.queryClient}>
+        <MemoryRouter {...config.router}>
+          <ThemeProvider theme={config.theme}>
+            {children}
+          </ThemeProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
     );
   };
+  
+  TestWrapper.displayName = 'TestWrapper';
+  return TestWrapper;
 }
 
 /**
- * Custom render function with providers
- * Wraps React Testing Library's render with common providers
+ * Custom render function with provider wrapper
  * 
- * @param ui - Component to render
- * @param options - Render and provider options
- * @returns Render result with store reference
- * @throws TestUtilityError if rendering fails
+ * @param ui - React element to render
+ * @param options - Extended render options
+ * @returns Render result with additional utilities
  */
 export function renderWithProviders(
   ui: ReactElement,
   options: CustomRenderOptions = {}
-): CustomRenderResult {
-  const { storeConfig, routerConfig, wrappers = [], ...renderOptions } = options;
-
-  // Create store if config provided
-  const store = storeConfig ? createMockStore(storeConfig) : createMockStore();
-
-  // Build provider wrappers
-  const providerWrappers: React.ComponentType<{ children: React.ReactNode }>[] = [
-    // Redux Provider
-    ({ children }) => <Provider store={store}>{children}</Provider>,
-    // Router Provider
-    ({ children }) => (
-      <MemoryRouter {...(routerConfig ?? DEFAULT_ROUTER_CONFIG)}>
-        {children}
-      </MemoryRouter>
-    ),
-    // Additional custom wrappers
-    ...wrappers,
-  ];
-
-  const AllProviders = combineWrappers(providerWrappers);
-
+): RenderResult {
+  const { providers = {}, ...renderOptions } = options;
+  
+  // Merge with defaults, ensuring all required fields are present
+  const config: Required<TestProviderConfig> = {
+    router: providers.router ?? defaultTestConfig.router,
+    queryClient: providers.queryClient ?? defaultTestConfig.queryClient,
+    theme: providers.theme ?? defaultTestConfig.theme,
+  };
+  
+  const Wrapper = createTestWrapper(config);
+  
   try {
-    const renderResult = render(ui, {
-      wrapper: AllProviders,
-      ...renderOptions,
-    });
-
-    return {
-      ...renderResult,
-      store,
-    };
+    return render(ui, { wrapper: Wrapper, ...renderOptions });
   } catch (error) {
-    throw new TestUtilityError('Failed to render component with providers', error);
+    logger.error('Failed to render with providers', { error, providers });
+    throw error;
   }
 }
 
 /**
- * Waits for an element to be removed from the DOM
- * Useful for testing loading spinners and transitions
+ * Simulates user authentication state in tests
  * 
- * @param callback - Function that returns the element
- * @param timeout - Maximum wait time in ms (default: 4500)
- * @returns Promise that resolves when element is removed
+ * @param user - User data to set as authenticated
  */
-export async function waitForElementToBeRemoved<T>(
-  callback: (() => T) | T,
-  timeout: number = 4500
-): Promise<void> {
-  const { waitForElementToBeRemoved: rtlWaitForRemoved } = await import(
-    '@testing-library/react'
-  );
-  
+export function mockAuthenticatedUser(user: { id: string; email: string; name?: string }): void {
+  // Store in localStorage for persistence across test scenarios
   try {
-    await rtlWaitForRemoved(callback, { timeout });
+    localStorage.setItem('test:user', JSON.stringify(user));
   } catch (error) {
-    throw new TestUtilityError('Element was not removed within timeout', error);
+    logger.error('Failed to mock authenticated user', { error, user });
+    throw error;
+  }
+}
+
+/**
+ * Clears mocked authentication state
+ */
+export function clearMockAuthentication(): void {
+  try {
+    localStorage.removeItem('test:user');
+  } catch (error) {
+    logger.error('Failed to clear mock authentication', { error });
+    throw error;
   }
 }
 
 // UI Layer: DOM interaction helpers
-// =================================
+// ==================================
 
 /**
- * Simulates user typing with proper events
- * Fires input, change, and blur events in sequence
+ * Finds element by data-testid with proper error handling
  * 
- * @param element - Input element to type into
- * @param value - Value to type
- * @throws TestUtilityError if element is invalid
+ * @param container - Container element to search within
+ * @param testId - data-testid attribute value
+ * @returns Found element or null
  */
-export function simulateTyping(element: HTMLElement, value: string): void {
-  if (!element) {
-    throw new TestUtilityError('Cannot simulate typing: element is null or undefined');
+export function findByTestId(container: HTMLElement, testId: string): HTMLElement | null {
+  if (!container) {
+    logger.warn('Container is null or undefined');
+    return null;
   }
-
-  // Validate element is an input-like element
-  const validTags = ['INPUT', 'TEXTAREA', 'SELECT'];
-  const isContentEditable = element.getAttribute('contenteditable') === 'true';
   
-  if (!validTags.includes(element.tagName) && !isContentEditable) {
-    throw new TestUtilityError(
-      `Cannot simulate typing: element must be input, textarea, select, or contenteditable. Got: ${element.tagName}`
-    );
-  }
-
-  // Fire events in sequence to mimic real user behavior
-  const inputEvent = new Event('input', { bubbles: true });
-  const changeEvent = new Event('change', { bubbles: true });
-  const blurEvent = new Event('blur', { bubbles: true });
-
-  // Set value and dispatch events
-  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-    element.value = value;
-  } else if (isContentEditable) {
-    element.textContent = value;
-  }
-
-  element.dispatchEvent(inputEvent);
-  element.dispatchEvent(changeEvent);
-  element.dispatchEvent(blurEvent);
+  return container.querySelector(`[data-testid="${testId}"]`);
 }
 
 /**
- * Generates a unique test ID with optional prefix
- * Useful for creating isolated test identifiers
+ * Creates a typed change event for form inputs
  * 
- * @param prefix - Optional prefix for the ID
- * @returns Unique test identifier
+ * @param value - Value to set
+ * @returns Partial change event object
  */
-export function generateTestId(prefix: string = 'test'): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 8);
-  return `${prefix}-${timestamp}-${random}`;
-}
-
-// Helper functions
-// ================
-
-/**
- * Maps HTTP status codes to status text
- * 
- * @param status - HTTP status code
- * @returns Status text description
- */
-function getStatusText(status: number): string {
-  const statusTexts: Record<number, string> = {
-    200: 'OK',
-    201: 'Created',
-    204: 'No Content',
-    400: 'Bad Request',
-    401: 'Unauthorized',
-    403: 'Forbidden',
-    404: 'Not Found',
-    500: 'Internal Server Error',
-    502: 'Bad Gateway',
-    503: 'Service Unavailable',
+export function createChangeEvent(value: string): { target: { value: string } } {
+  return {
+    target: { value },
   };
-
-  return statusTexts[status] || 'Unknown Status';
 }
 
-// Re-export testing library utilities for convenience
-export { screen, waitFor, within } from '@testing-library/react';
+/**
+ * Mocks file upload for testing file inputs
+ * 
+ * @param fileName - Name of the file
+ * @param content - File content
+ * @param type - MIME type
+ * @returns Mock File object
+ */
+export function createMockFile(fileName: string, content: string, type: string): File {
+  const blob = new Blob([content], { type });
+  return new File([blob], fileName, { type });
+}
+
+// Re-export testing-library utilities for convenience
+export { screen, waitFor, fireEvent, within } from '@testing-library/react';
 export { userEvent } from '@testing-library/user-event';

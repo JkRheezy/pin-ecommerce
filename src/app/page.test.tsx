@@ -8,28 +8,16 @@
  * - Service: src/services/page.service.ts
  * - Runtime: src/app/page.tsx
  * - UI: src/components/page/
+ * 
+ * This file imports and re-exports split tests for better maintainability.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { PageService } from '../services/page.service';
-import { PageRepo } from '../repos/page.repo';
-import { PageConfig } from '../config/page.config';
-import Page from '../app/page';
-import type { PageData, PageProps } from '../types/page.types';
-
-describe('Page Integration Tests', () => {
-  let pageService: PageService;
-  let pageRepo: PageRepo;
-  let pageConfig: PageConfig;
-
-  beforeEach(() => {
-    pageConfig = new PageConfig({
-      defaultTitle: 'Test Page',
-      defaultDescription: 'Test Description',
-    });
-    pageRepo = new PageRepo(pageConfig);
-    pageService = new PageService(pageRepo);
+// Import and re-export all split test modules
+export * from './page.types.test';
+export * from './page.config.test';
+export * from './page.repo.test';
+export * from './page.service.test';
+export * from './page.ui.test';geService = new PageService(pageRepo);
   });
 
   describe('Service Layer Integration', () => {
