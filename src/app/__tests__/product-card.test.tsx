@@ -1,30 +1,15 @@
 /**
- * Product Card Test Module
+ * @deprecated This monolithic test file has been extracted into smaller, focused test files:
+ * - ProductCard.rendering.test.tsx
+ * - ProductCard.interaction.test.tsx
+ * - ProductCard.loading.test.tsx
+ * - ProductCard.error.test.tsx
  * 
- * Tests for the ProductCard component following the six-layer architecture.
- * Layer: UI (Presentation layer testing)
+ * Please use the extracted test files instead.
+ * This file is kept for reference only and will be removed in a future update.
  */
 
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { ProductCard } from '@ui/components/ProductCard';
-import { ProductCardSkeleton } from '@ui/components/ProductCardSkeleton';
-import { ProductCardError } from '@ui/components/ProductCardError';
-import { ProductService } from '@services/ProductService';
-import { ProductRepo } from '@repo/ProductRepo';
-import { ProductConfig } from '@config/ProductConfig';
-import type { Product, ProductId, Money } from '@types/Product';
-import { Logger } from '@utils/Logger';
-
-// Mock dependencies
-jest.mock('@services/ProductService');
-jest.mock('@repo/ProductRepo');
-jest.mock('@config/ProductConfig');
-jest.mock('@utils/Logger');
-
-describe('ProductCard Component Tests', () => {
-  // Test fixtures following taste invariants
-  const mockProductId: ProductId = 'prod-123';
+// Tests extracted - see individual test files in __tests__/product-card/uctId: ProductId = 'prod-123';
   
   const mockPrice: Money = {
     amount: 2999,
