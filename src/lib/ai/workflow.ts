@@ -46,6 +46,25 @@ export interface ProductWorkflowState {
 // ==================== LLM 调用 ====================
 
 import { logger } from '@harness/logging'
+import { RetryPolicy, withRetry } from '@harness/retry'
+
+// ==================== 重试策略配置 ====================
+
+const llmRetryPolicy: RetryPolicy = {
+  maxAttempts: 3,
+  backoffMultiplier: 2,
+  initialDelayMs: 1000,
+  maxDelayMs: 10000,
+  retryableErrors: ['ECONNRESET', 'ETIMEDOUT', '429', '503', '504']
+}
+
+const imageRetryPolicy: RetryPolicy = {
+  maxAttempts: 5,
+  backoffMultiplier: 2,
+  initialDelayMs: 2000,
+  maxDelayMs: 30000,
+  retryableErrors: ['ECONNRESET', 'ETIMEDOUT', '429', '503', '504', 'RATE_LIMIT']
+}harness/logging'
 import { Result } from '@harness/types'
 
 // ==================== 错误处理 ====================
