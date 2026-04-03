@@ -1,215 +1,122 @@
 /**
- * Workflow Module Index
- * 
- * Re-exports all workflow-related functionality following the six-layer architecture.
- * This module serves as the public API surface for the workflow system.
- * 
- * Layer: Repo (Repository/Module Interface)
+ * Workflow Module Index Barrel
+ *
+ * Re-exports all workflow-related modules following the six-layer architecture.
+ * This provides a clean public API for consuming workflow functionality.
+ *
+ * @module ai/workflow
  */
 
-// ==========================================
-// Types Layer Exports
-// ==========================================
-
+// ==================== Types Layer ====================
+// Core type definitions for workflows
 export type {
-  // Core workflow types
   WorkflowDefinition,
   WorkflowStep,
-  WorkflowStepType,
   WorkflowContext,
-  WorkflowExecution,
-  WorkflowExecutionStatus,
-  WorkflowTrigger,
-  WorkflowTriggerType,
-  
-  // Step-specific types
-  StepInput,
-  StepOutput,
-  StepConfig,
-  StepValidationResult,
-  
-  // Execution types
-  ExecutionMetadata,
-  ExecutionError,
-  ExecutionLog,
-  
-  // Hook types
-  WorkflowHooks,
-  StepLifecycleHooks,
+  WorkflowExecutionState,
+  WorkflowStepResult,
+  WorkflowValidationError,
+  WorkflowExecutionOptions,
+  WorkflowStepType,
+  WorkflowStatus,
 } from './types';
 
-// ==========================================
-// Config Layer Exports
-// ==========================================
-
+// ==================== Config Layer ====================
+// Configuration schemas and defaults
 export {
-  // Workflow configuration defaults
-  DEFAULT_WORKFLOW_CONFIG,
-  WORKFLOW_STEP_TIMEOUT_MS,
-  MAX_WORKFLOW_RETRIES,
-  
-  // Validation schemas
-  workflowDefinitionSchema,
-  workflowStepSchema,
-  validateWorkflowConfig,
+  WORKFLOW_DEFAULTS,
+  WORKFLOW_VALIDATION_RULES,
+  WORKFLOW_EXECUTION_LIMITS,
 } from './config';
 
 export type {
   WorkflowConfig,
-  WorkflowEngineConfig,
+  WorkflowExecutionConfig,
 } from './config';
 
-// ==========================================
-// Repo Layer Exports
-// ==========================================
-
+// ==================== Repo Layer ====================
+// Data access and persistence
 export {
-  // Workflow repository
   WorkflowRepository,
-  createWorkflowRepository,
-  
-  // Execution repository
   WorkflowExecutionRepository,
-  createWorkflowExecutionRepository,
-  
-  // Storage adapters
-  InMemoryWorkflowStorage,
-  PersistentWorkflowStorage,
 } from './repo';
 
 export type {
-  WorkflowStorage,
-  WorkflowQueryOptions,
-  WorkflowExecutionQueryOptions,
+  WorkflowRepositoryOptions,
+  WorkflowExecutionRepositoryOptions,
 } from './repo';
 
-// ==========================================
-// Service Layer Exports
-// ==========================================
-
+// ==================== Service Layer ====================
+// Business logic and orchestration
 export {
-  // Core workflow engine
-  WorkflowEngine,
-  createWorkflowEngine,
-  
-  // Step executors
-  BaseStepExecutor,
-  createStepExecutor,
-  
-  // Workflow compiler
-  WorkflowCompiler,
-  compileWorkflow,
-  
-  // Workflow validator
+  WorkflowService,
+  WorkflowOrchestrator,
   WorkflowValidator,
-  validateWorkflow,
 } from './service';
 
 export type {
-  WorkflowEngineOptions,
-  StepExecutorContext,
-  CompiledWorkflow,
-  ValidationReport,
+  WorkflowServiceOptions,
+  WorkflowOrchestratorOptions,
+  WorkflowValidatorOptions,
 } from './service';
 
-// ==========================================
-// Runtime Layer Exports
-// ==========================================
-
+// ==================== Runtime Layer ====================
+// Execution engine and step handlers
 export {
-  // Runtime environment
   WorkflowRuntime,
-  createWorkflowRuntime,
-  
-  // Context providers
-  WorkflowContextProvider,
-  createContextProvider,
-  
-  // State management
-  WorkflowStateManager,
-  createStateManager,
-  
-  // Event handling
-  WorkflowEventBus,
-  createWorkflowEventBus,
+  WorkflowStepExecutor,
+  WorkflowContextManager,
 } from './runtime';
 
 export type {
-  RuntimeEnvironment,
-  RuntimeContext,
-  StateSnapshot,
-  WorkflowEvent,
-  WorkflowEventHandler,
+  WorkflowRuntimeOptions,
+  WorkflowStepExecutorOptions,
+  WorkflowContextManagerOptions,
 } from './runtime';
 
-// ==========================================
-// UI Layer Exports (if applicable)
-// ==========================================
-
+// ==================== UI Layer ====================
+// Presentation and interaction components (if applicable)
 export {
-  // React hooks (if React is available)
-  useWorkflow,
-  useWorkflowExecution,
-  useWorkflowStep,
-  
-  // Utilities for UI integration
-  formatWorkflowStatus,
-  getWorkflowProgress,
+  WorkflowRenderer,
+  WorkflowStatusIndicator,
 } from './ui';
 
 export type {
-  UseWorkflowOptions,
-  UseWorkflowReturn,
-  WorkflowUIState,
+  WorkflowRendererOptions,
+  WorkflowStatusIndicatorProps,
 } from './ui';
 
-// ==========================================
-// Error Handling
-// ==========================================
-
+// ==================== Error Handling ====================
+// Centralized error types for workflow operations
 export {
-  // Custom error classes
   WorkflowError,
-  WorkflowValidationError,
+  WorkflowValidationError as WorkflowValidationErrorClass,
   WorkflowExecutionError,
+  WorkflowNotFoundError,
   WorkflowStepError,
-  WorkflowTimeoutError,
-  
-  // Error codes
-  WorkflowErrorCode,
-  
-  // Error utilities
-  isWorkflowError,
-  formatWorkflowError,
 } from './errors';
 
-// ==========================================
-// Utilities
-// ==========================================
-
+// ==================== Utilities ====================
+// Shared helper functions
 export {
-  // Workflow utilities
   generateWorkflowId,
-  generateExecutionId,
-  cloneWorkflow,
-  mergeWorkflowContext,
-  
-  // Step utilities
-  createStepId,
-  parseStepReference,
-  resolveStepDependencies,
-  
-  // Logging utilities
-  createWorkflowLogger,
-  withWorkflowLogging,
+  sanitizeWorkflowInput,
+  validateWorkflowStep,
+  serializeWorkflowState,
+  deserializeWorkflowState,
 } from './utils';
 
-// ==========================================
-// Constants
-// ==========================================
+/**
+ * Initialize the workflow module with optional configuration overrides.
+ * This should be called once during application startup.
+ *
+ * @param config - Optional configuration overrides
+ * @returns Initialized workflow service instance
+ * @throws {WorkflowError} If initialization fails
+ */
+export { initializeWorkflowModule } from './init';
 
-export {
-  WORKFLOW_VERSION,
-  SUPPORTED_STEP_TYPES,
-  WORKFLOW_EVENTS,
-} from './constants';
+/**
+ * Default export for convenience when importing the entire module
+ */
+export { WorkflowModule as default } from './module';
