@@ -46,6 +46,71 @@ export interface ProductWorkflowState {
 // ==================== LLM 调用 ====================
 
 import { logger } from '@harness/logging'
+import { Result } from '@harness/types'
+
+// ==================== 错误处理 ====================
+
+class WorkflowError extends Error {
+  constructor(
+    message: string,
+    public readonly step: string,
+    public readonly cause?: unknown
+  ) {
+    super(message)
+    this.name = 'WorkflowError'
+  }
+}
+
+function handleStepError(step: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  logger.error({ step, error: message, cause: error }, `Workflow step ${step} failed`)
+  return message
+}
+
+// ==================== 结果持久化 ====================
+
+interface PersistedResult {
+  workflowId: string
+  step: string
+  timestamp: number
+  success: boolean
+  data?: unknown
+  error?: string
+}
+
+const results: Map<string, PersistedResult[]> = new Map()
+
+function persistResult(
+  workflowId: string,
+  step: string,
+  success: boolean,
+  data?: unknown,
+  error?: string
+): void {
+  const entry: PersistedResult = {
+    workflowId,
+    step,
+    timestamp: Date.now(),
+    success,
+    data,
+    error
+  }
+  
+  const existing = results.get(workflowId) || []
+  existing.push(entry)
+  results.set(workflowId, existing)
+  
+  logger.info({ workflowId, step, success }, 'Workflow step result persisted')
+}
+
+function getWorkflowResults(workflowId: string): PersistedResult[] {
+  return results.get(workflowId) || []
+}
+
+function clearWorkflowResults(workflowId: string): void {
+  results.delete(workflowId)
+  logger.info({ workflowId }, 'Workflow results cleared')
+}harness/logging'
 
 async function callLLM(systemPrompt: string, userPrompt: string): Promise<string> {
   const response = await fetch(`${process.env.LLM_BASE_URL || 'https://api.openai.com/v1'}/chat/completions`, {
